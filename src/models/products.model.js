@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const categoriesEnum = ["bakery", "dairy", "snacks"]; //will be expanded as needed
+const categoriesEnum = ["bakery", "dairy", "snacks"]; 
 
 const productSchema = new mongoose.Schema({
     category: { 
@@ -25,12 +25,12 @@ const productSchema = new mongoose.Schema({
         type: Date,
         required: true
     },
-    validDate: { //  Not required since it's calculated.
+    validDate: { 
         type: Date
     },
     vendorId: { 
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Vendors', // Targets your exported Vendors model name
+        ref: 'Vendors', 
         required: true
     },
     quantity: { 
@@ -52,6 +52,29 @@ const productSchema = new mongoose.Schema({
         type: [String], 
     }
 }, { timestamps: true });
+
+// Modern asynchronous pre-save hook (no 'next' parameter = no hanging bugs)
+productSchema.pre("save", async function() {
+
+    if (!this.isModified("category") && !this.isModified("expiryDate")) return; // Only recalculate if category or expiryDate has changed
+
+    if (!this.expiryDate) return; // If expiryDate is not set, we can't calculate validDate, so we skip the calculation
+
+    // 3. Define subtraction rules per category
+    const daysToSubtractBeforeExpiry = {
+        bakery: 7,  
+        dairy: 10,   
+        snacks: 30   
+    };
+
+    const bufferDays = daysToSubtractBeforeExpiry[this.category] || 0;
+   
+    const calculatedDate = new Date(this.expiryDate);
+   
+    calculatedDate.setDate(calculatedDate.getDate() - bufferDays); // Subtract the buffer days from the expiry date
+   
+    this.validDate = calculatedDate;   // Update the field natively
+});
 
 const Products = mongoose.model('Product', productSchema);
 export default Products;
