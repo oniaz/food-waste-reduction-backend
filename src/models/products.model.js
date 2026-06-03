@@ -16,7 +16,7 @@ const productSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
-    discount: { // matches discount string NN (Kept as Number)
+    discount: { 
         type: Number,
         required: true,
         default: 0
@@ -53,5 +53,5 @@ const productSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-const Product = mongoose.model('Product', productSchema);
-export default Product;
+const Products = mongoose.model('Product', productSchema);
+export default Products;
