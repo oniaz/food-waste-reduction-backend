@@ -14,25 +14,29 @@ const orderSchema = new mongoose.Schema({
         },
         quantity: {
             type: Number,
-            required: true
+            required: true,
+            min: 1
         },
         priceAtPurchase: {
             type: Number,
-            required: true
+            required: true,
+            min: 0
         },
         isCommissioned: {
             type: Boolean,
-            required: true
+            default: false
         }
     }],
     status: {
         type: String,
-        enum: ['ready', 'completed', 'cancelled'],
+        enum: ['ready', 'completed', 'cancelled', 'pending'],
         default: 'pending'
     },
     shippingAddress: {
         type: String,
-        required: true
+        required: true,
+        trim: true,
+        maxlength: 200
     },
     paymentMethod: {
         type: String,
