@@ -217,6 +217,18 @@ export const cancelOrder = async (req, res, next) => {
             { new: true, runValidators: true } // runValidators ensures that any schema validations are re-applied during update, and new: true returns the updated document in the response
         );
 
+        // When an order is cancelled, we need to restock the products in that order by incrementing their stock counts back up by the quantities in the cancelled order. We can use bulkWrite for efficient batch updates.
+        const updateStock = order.products.map(item => ({
+            updateOne: {
+                filter: { _id: item.productId },
+                update: { $inc: { quantity: item.quantity } } 
+            }
+        }));
+
+        await Product.bulkWrite(updateStock); 
+        //.bulkWrite() takes an array of update operations and executes
+        // them directly on the database server in a single network request packet.
+        //this prevents the overhead of multiple round-trip queries that would occur if we updated each product sequentially in a loop, which is especially beneficial when there are many products to update.
         return res.status(200).json({ 
             success: true,
             message: "Order cancelled successfully", 
