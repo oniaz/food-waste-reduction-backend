@@ -54,3 +54,27 @@ export const createOrder = async (req, res, next) => {
         next(error);
     }
 };
+
+// GET /orders/my-orders | Auth required (customer) | get logged-in customer orders
+export const getMyOrders = async (req, res, next) => {  //mock auth was used for testing
+    try {
+        // Implementation logic to get orders for the logged-in customer
+    
+        
+        const customerId = req.user?.id; ////modify this to match auth middleware's user object structure
+        if (!customerId) {
+            return res.status(401).json({ message: "Unauthorized: Customer ID not found" });
+        }
+
+        const orders = await Order.find({ customerId }).sort({ createdAt: -1 });
+
+        return res.status(200).json({ 
+            success: true, 
+            count: orders.length, 
+            orders 
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
