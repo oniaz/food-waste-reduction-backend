@@ -65,8 +65,8 @@ export const getMyOrders = async (req, res, next) => {  //mock auth was used for
         if (!customerId) {
             return res.status(401).json({ message: "Unauthorized: Customer ID not found" });
         }
-
-        const orders = await Order.find({ customerId }).sort({ createdAt: -1 });
+        const limit = parseInt(req.query.limit, 10) || 10;
+        const orders = await Order.find({ customerId }).sort({ createdAt: -1 }).limit(limit);
 
         return res.status(200).json({ 
             success: true, 
@@ -78,3 +78,4 @@ export const getMyOrders = async (req, res, next) => {  //mock auth was used for
         next(error);
     }
 };
+
