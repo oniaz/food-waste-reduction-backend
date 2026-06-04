@@ -1,5 +1,5 @@
 import express from "express";
-import { createOrder } from "./orders.controller.js";
+import { createOrder , getMyOrders } from "./orders.controller.js";
 const router = express.Router();
 
 // POST /orders | Auth required (customer) | create order from cart items
@@ -12,9 +12,13 @@ const router = express.Router();
 
 router.post("/", createOrder);
 
-router.get("/my-orders", (req, res) => {
-    res.json({message: "Get customer orders endpoint"});
-});
+//////////TEMPORARY MOCK AUTH MIDDLEWARE JUST FOR TESTING////////////////
+const mockAuth = (req, res, next) => {
+    req.user = { id: "65f1234567890abcdef12345" }; // The mock Customer ID from database
+    next();
+};
+
+router.get("/my-orders", mockAuth, getMyOrders);
 
 router.get("/:id", (req, res) => {
     res.json({message: "Get order by ID endpoint"});
