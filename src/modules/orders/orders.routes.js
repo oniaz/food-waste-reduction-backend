@@ -1,5 +1,5 @@
 import express from "express";
-import { createOrder , getMyOrders , getOrderDetails , getSellerOrders} from "./orders.controller.js";
+import { createOrder , getMyOrders , getOrderDetails , getSellerOrders, cancelOrder} from "./orders.controller.js";
 const router = express.Router();
 
 // POST /orders | Auth required (customer) | create order from cart items
@@ -12,19 +12,19 @@ const router = express.Router();
 
 router.post("/", createOrder);
 
-//////////TEMPORARY MOCK AUTH MIDDLEWARE JUST FOR TESTING////////////////
-// const mockAuth = (req, res, next) => {
-//     req.user = { id: "65f1234567890abcdef12345", role: "customer" }; // The mock Customer ID from database
-//     next();
-// };
-
+////////TEMPORARY MOCK AUTH MIDDLEWARE JUST FOR TESTING////////////////
 const mockAuth = (req, res, next) => {
-    req.user = { 
-        id: "65f5555555555abcdef99999", 
-        role: "vendor" 
-    };
+    req.user = { id: "65f1234567890abcdef12345", role: "customer" }; // The mock Customer ID from database
     next();
 };
+
+// const mockAuth = (req, res, next) => {
+//     req.user = { 
+//         id: "65f5555555555abcdef99999", 
+//         role: "vendor" 
+//     };
+//     next();
+// };
 
 router.get("/my-orders", mockAuth, getMyOrders);
 
@@ -33,9 +33,7 @@ router.get("/seller", mockAuth, getSellerOrders); //must be defined before the m
 router.get("/:id", mockAuth, getOrderDetails);
 
 
-router.patch("/:id/cancel", (req, res) => {
-    res.json({message: "Cancel order endpoint"});
-});
+router.patch("/:id/cancel", mockAuth, cancelOrder);
 
 router.patch("/:id/status", (req, res) => {
     res.json({message: "Update order status endpoint"});
