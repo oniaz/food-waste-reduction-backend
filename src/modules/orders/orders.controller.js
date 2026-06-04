@@ -132,3 +132,53 @@ export const getOrderDetails = async (req, res, next) => {
         next(error);
     }
 };
+// GET /orders/seller | Auth required (seller) | get all orders containing seller products
+export const getSellerOrders = async (req, res, next) => {
+    try {
+        const sellerId = req.user?.id;
+        const currentUserRole = req.user?.role;
+        //check if user is a vendor
+        if (currentUserRole !== 'vendor') {
+            return res.status(403).json({ message: "Forbidden: Only vendors can access this endpoint" });
+        }
+        // Validate seller ID presence
+        if (!sellerId) {
+            return res.status(401).json({ message: "Unauthorized: Seller ID not found" });
+        }
+
+        const limit = parseInt(req.query.limit, 10) || 10;
+        const sellerProductIds = await Product.distinct('_id', { vendorId: sellerId }); // Get array of all product IDs that belong to this seller , distinct is used to optimize the query by only returning unique product IDs instead of full product documents
+
+        if (sellerProductIds.length === 0) { //if no products, then no orders can contain seller products
+            return res.status(200).json({ 
+                success: true, 
+                count: 0, 
+                orders: [] 
+            });
+        }
+
+        //Find orders containing any of those product IDs using $in operator
+        const orders = await Order.find({ 
+            "products.productId": { $in: sellerProductIds } 
+        })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .populate({
+            path: 'customerId',
+            select: 'name email'
+        })
+        .populate({
+            path: 'products.productId',
+            select: 'productName priceWithCommission category'
+        });
+
+        return res.status(200).json({ 
+            success: true, 
+            count: orders.length, 
+            orders 
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
