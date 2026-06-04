@@ -1,5 +1,7 @@
 import Order from "../../models/orders.model.js";
 import Product from "../../models/products.model.js";
+import Customer from "../../models/customers.model.js";
+import Vendor from "../../models/vendors.model.js";
 import express from "express";
 import mongoose from "mongoose";
 
@@ -79,3 +81,54 @@ export const getMyOrders = async (req, res, next) => {  //mock auth was used for
     }
 };
 
+// GET /orders/:id | Auth required (customer owner, seller involved, admin) | get order details 
+//one end point used for all three roles with guardrails in controller
+export const getOrderDetails = async (req, res, next) => {
+    try {
+        // Implementation logic to get order details by ID 
+            const orderId = req.params.id;
+            if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+                return res.status(400).json({ message: "Invalid order ID" });
+            }
+            const order = await Order.findById(orderId).populate({
+                path: 'customerId',
+                select: 'name email' //only name and email of customer are needed in order details response
+            }).populate({
+                path: 'products.productId', 
+                populate: {
+                    path: 'vendorId', //populate the vendor details of each product in the order
+                    select: 'shopName email detailedAddress' //only shop name and email of vendor are needed in order details response
+                }
+            });
+            if (!order) {
+                return res.status(404).json({ message: "Order not found" });
+            }
+            // --- MULTI-ROLE SECURITY GUARDRAIL ---
+        const currentUserId = req.user?.id;
+        const currentUserRole = req.user?.role;
+
+        //Check if the user is an Admin
+        const isAdmin = currentUserRole === 'admin';
+
+        // Check if the user is the Customer who bought it
+        const isCustomerOwner = order.customerId?._id.toString() === currentUserId && currentUserRole === 'customer';
+
+        // Check if the user is a Vendor AND they own one of the products in this order
+        const isSellerInvolved = currentUserRole === 'vendor' && order.products.some(item => { 
+            const vendorId = item.productId?.vendorId?._id || item.productId?.vendorId;
+            return vendorId?.toString() === currentUserId;
+        });
+
+        // If the current user is NOT an admin, NOT the buyer, and NOT an involved seller... block them!
+        if (!isAdmin && !isCustomerOwner && !isSellerInvolved) {
+            return res.status(403).json({ message: "Forbidden: You do not have permission to view this order" });
+        }
+        return res.status(200).json({
+            success: true,
+            order
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
