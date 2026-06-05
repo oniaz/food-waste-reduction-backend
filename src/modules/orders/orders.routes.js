@@ -1,5 +1,5 @@
 import express from "express";
-
+import { createOrder , getMyOrders , getOrderDetails , getSellerOrders, cancelOrder, updateOrderStatus , rateOrder} from "./orders.controller.js";
 const router = express.Router();
 
 // POST /orders | Auth required (customer) | create order from cart items
@@ -10,32 +10,33 @@ const router = express.Router();
 // PATCH /orders/:id/status | Auth required (seller owner, admin) | update order status lifecycle
 // POST /orders/:id/rate | Auth required (customer owner) | rate completed order and update seller rating
 
-router.post("/", (req, res) => {
-    res.json({message: "Create order endpoint"});
-});
 
-router.get("/my-orders", (req, res) => {
-    res.json({message: "Get customer orders endpoint"});
-});
+//////TEMPORARY MOCK AUTH MIDDLEWARE JUST FOR TESTING////////////////
+const mockAuth = (req, res, next) => {
+    req.user = { id: "65f1234567890abcdef12345", role: "customer" }; // The mock Customer ID from database
+    next();
+};
 
-router.get("/:id", (req, res) => {
-    res.json({message: "Get order by ID endpoint"});
-});
+// const mockAuth = (req, res, next) => {
+    //     req.user = { 
+        //         id: "65f5555555555abcdef99999", 
+        //         role: "vendor" 
+        //     };
+        //     next();
+        // };
+        
+router.post("/", mockAuth,createOrder);
+router.get("/my-orders", mockAuth, getMyOrders);
 
-router.get("/seller", (req, res) => {
-    res.json({message: "Get seller orders endpoint"});
-});
+router.get("/seller", mockAuth, getSellerOrders); //must be defined before the more general /:id route to avoid route conflicts
 
-router.patch("/:id/cancel", (req, res) => {
-    res.json({message: "Cancel order endpoint"});
-});
+router.get("/:id", mockAuth, getOrderDetails);
 
-router.patch("/:id/status", (req, res) => {
-    res.json({message: "Update order status endpoint"});
-});
 
-router.post("/:id/rate", (req, res) => {
-    res.json({message: "Rate order endpoint"});
-});
+router.patch("/:id/cancel", mockAuth, cancelOrder);
+
+router.patch("/:id/status", mockAuth, updateOrderStatus);
+
+router.post("/:id/rate",mockAuth, rateOrder);
 
 export default router;
