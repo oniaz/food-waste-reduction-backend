@@ -7,12 +7,12 @@ import helmet from "helmet";
 
 import connectDB from "./config/db.js";
 
-
 import authRoutes from "./modules/auth/auth.routes.js";
 import usersRoutes from "./modules/users/users.routes.js";
 import ordersRoutes from "./modules/orders/orders.routes.js";
 import productsRoutes from "./modules/products/products.routes.js"
 import adminRoutes from "./modules/admin/admin.routes.js";
+import { notFoundMiddleware, errorMiddleware } from "./middleware/error.middleware.js";
 
 
 dotenv.config();
@@ -37,6 +37,9 @@ app.use("/api/users", usersRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/products", productsRoutes);
 app.use("/api/admin", adminRoutes);
+
+app.use(notFoundMiddleware);
+app.use(errorMiddleware);
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
