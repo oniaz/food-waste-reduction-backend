@@ -1,8 +1,8 @@
 import express from "express";
 import {register, login, logout , forgotPassword, resetPassword } from "./auth.controller.js";
-import authenticate from "../../middleware/authentication.middleware";
-import authorizeRole from "../../middleware/authorization.middleware";
-import authorizeStatus from "../../middleware/authorizationStatus.middleware";
+import authenticate from "../../middleware/authentication.middleware.js";
+import authorizeRole from "../../middleware/authorization.middleware.js";
+import authorizeStatus from "../../middleware/status.middleware.js";
 
 const router = express.Router();
 
