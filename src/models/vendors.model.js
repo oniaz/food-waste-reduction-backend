@@ -1,15 +1,6 @@
 import mongoose from "mongoose";
 
 const vendorsSchema = new mongoose.Schema({
-    email: {
-        type: String,
-        required: true,
-        unique: true, // Unique per vendor profile
-        minlength: 5,
-        maxlength: 50,
-        trim: true,
-        lowercase: true
-    },
     shopName: {
         type: String,
         required: true,

@@ -23,7 +23,10 @@ app.use(morgan("dev"));
 app.use(express.json());
 app.use(helmet());
 app.use(cookieParser());
-app.use(cors());
+app.use(cors({
+    origin: true,
+    credentials: true
+}));
 app.use(express.urlencoded({ extended: true }));
 
 await connectDB();

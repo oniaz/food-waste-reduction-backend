@@ -19,6 +19,12 @@ const usersAuthSchema = new mongoose.Schema({
         required: true,
         enum: ["customer", "vendor", "admin"]
     },
+    email: {
+        type: String,
+        required: true,
+        trim: true,
+        lowercase: true
+    },
     accountStatus: {
         type: String,
         required: true,
