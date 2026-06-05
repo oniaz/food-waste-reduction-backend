@@ -89,7 +89,7 @@ export const register = async (req, res, next) => {
         return res.status(201).json({ message: "User registered successfully." });
 
     } catch (error) {
-        next(err);
+        next(error);
     }
 };
 
