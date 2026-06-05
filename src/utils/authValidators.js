@@ -20,6 +20,10 @@ export function validatePassword(password) {
     if (password.length < 6) {
         return "Password must be at least 6 characters.";
     }
+
+    if (/\s/.test(password)) {
+        return "Password cannot contain spaces.";
+    }
     return null;
 }
 
