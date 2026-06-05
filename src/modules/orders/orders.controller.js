@@ -240,4 +240,69 @@ export const cancelOrder = async (req, res, next) => {
     } 
 };
 
- 
+ // PATCH /orders/:id/status | Auth required (seller owner, admin) | update order status lifecycle
+export const updateOrderStatus = async (req, res, next) => {
+    try {
+        const orderId = req.params.id;
+        const { status } = req.body;
+        const currentUserId = req.user?.id;
+        const currentUserRole = req.user?.role;
+        const validStatuses = ['ready', 'completed', 'cancelled', 'pending'];
+
+        if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+            return res.status(400).json({ message: "Invalid order ID" });
+        }
+        if (!status || !validStatuses.includes(status)) {
+            return res.status(400).json({ message: "Invalid or missing status value" });
+        }
+        
+        // FIX: Only intercept 'cancelled' here. Let 'completed' pass through to the database update.
+        if (status === 'cancelled') {
+            return res.status(400).json({ message: "Use the cancel endpoint to cancel orders" });
+        }
+        
+        if (currentUserRole !== 'admin' && currentUserRole !== 'vendor') {
+            return res.status(403).json({ message: "Forbidden: Only admins and vendors can update order status" });
+        }
+
+        const order = await Order.findById(orderId).populate({
+            path: 'products.productId',
+            select: 'vendorId'
+        });
+
+        if (!order) {
+            return res.status(404).json({ message: "Order not found" });
+        }
+
+        
+        if (order.status === 'cancelled' || order.status === 'completed') {
+            return res.status(400).json({ 
+                message: `Cannot update status. This order has already been finalized as '${order.status}'.` 
+            });
+        }
+
+        const isSellerInvolved = currentUserRole === 'vendor' && order.products.some(item => { 
+            const vendorId = item.productId?.vendorId?._id || item.productId?.vendorId;
+            return vendorId?.toString() === currentUserId;
+        });
+
+        if (currentUserRole === 'vendor' && !isSellerInvolved) {
+            return res.status(403).json({ message: "Forbidden: You can only update status of orders that contain your products" });
+        }
+       
+        const updatedOrder = await Order.findByIdAndUpdate(
+            orderId,
+            { $set: { status: status } },
+            { new: true, runValidators: true }
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: `Order status updated to '${status}' successfully`,
+            order: updatedOrder
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
