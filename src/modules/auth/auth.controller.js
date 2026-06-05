@@ -93,7 +93,36 @@ export const register = async (req, res) => {
     }
 };
 
-
+/**
+ * Authenticate a user and set a JWT cookie on success.
+ *
+ * @route POST /auth/login
+ *
+ * @body {Object} req.body
+ * @property {string} username - Registered username (trimmed, case-sensitive)
+ * @property {string} password - User password
+ *
+ * Rules:
+ * - Username is trimmed before lookup
+ * - Password is compared using bcrypt (hashed in DB)
+ * - Same error message is returned for invalid credentials (security)
+ *
+ * Auth Flow:
+ * - Find user by username
+ * - Validate password using bcrypt
+ * - Generate JWT token (sub, role, accountStatus)
+ * - Store token in httpOnly cookie
+ *
+ * Cookie:
+ * - httpOnly: true (prevents JS access)
+ * - secure: true in production only
+ * - sameSite: none (required for cross-origin frontend)
+ * - maxAge: 7 days
+ *
+ * @returns {Object} 200 - Login successful
+ * @returns {Object} 400 - Invalid credentials or missing fields
+ * @returns {Object} 500 - Server error
+ */
 export const login = async (req, res) => {
     try {
         let { username, password } = req.body;
