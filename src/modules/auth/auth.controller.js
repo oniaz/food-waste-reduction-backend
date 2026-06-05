@@ -59,14 +59,15 @@ export const register = async (req, res) => {
             }
         }
 
-        const accountStatus = role === "vendor" ? "pending" : "active";
+        // commented out until admin approval flow is implemented
+        // const accountStatus = role === "vendor" ? "pending" : "active";
 
         const newUser = new UsersAuth({
             username,
             password,
             role,
             email,
-            accountStatus
+            // accountStatus
         });
 
         await newUser.save();
