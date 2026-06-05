@@ -6,19 +6,18 @@ import cors from "cors";
 import helmet from "helmet";
 
 import connectDB from "./config/db.js";
-
-
 import authRoutes from "./modules/auth/auth.routes.js";
 import usersRoutes from "./modules/users/users.routes.js";
 import ordersRoutes from "./modules/orders/orders.routes.js";
-import productsRoutes from "./modules/products/products.routes.js"
+import productsRoutes from "./modules/products/products.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
 
-
 dotenv.config();
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// 1. Middleware
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(helmet());
@@ -26,20 +25,41 @@ app.use(cookieParser());
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 
+// 2. DB connection
 await connectDB();
 
+// 3. Home route
 app.get("/", (req, res) => {
-    res.json({message: "Welcome to the Waste Reduction API!"});
+  res.json({ message: "Welcome to the Waste Reduction API!" });
 });
 
+// 4. Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/products", productsRoutes);
 app.use("/api/admin", adminRoutes);
 
+app.use((req, res, next) => {
+  res.status(404).json({
+    success: false,
+    message: `Not Found - ${req.originalUrl}`,
+  });
+});
+
+app.use((err, req, res, next) => {
+  console.error("ERROR:", err.message);
+
+  const statusCode = err.statusCode || 500;
+  res.status(statusCode).json({
+    success: false,
+    message: err.message || "Internal Server Error",
+  });
+});
+
+// 7. Start server
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
 
 export default app;
