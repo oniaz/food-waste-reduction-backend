@@ -8,7 +8,7 @@ export const notFoundMiddleware = (req, res) => {
 
 export const errorMiddleware = (err, req, res, next) => {
     let statusCode = err.statusCode || err.status || 500;
-    let message = err.message || 'Internal server error';
+    let message = statusCode >= 500 ? 'Internal server error' : (err.message || 'Request failed');
 
     if (
         err?.type === 'entity.parse.failed' ||
