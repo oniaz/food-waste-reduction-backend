@@ -1,7 +1,9 @@
 import UsersAuth from "../../models/usersAuth.model.js";
 import { validateUsername, validateEmail, validatePassword, validateRole } from "../../utils/authValidators.js";
+import { sendPasswordResetEmail } from "../auth/auth.services.js";
 import jwt from "jsonwebtoken";
 import bcrypt from 'bcrypt';
+// import nodeMailer from "nodemailer";
 
 /**
  * Register a new user.
@@ -197,5 +199,87 @@ export const logout = async (req, res) => {
         });
     } catch (error) {
         return res.status(500).json({ message: error.message });
+    }
+};
+
+
+export const forgotPassword = async (req, res) => {
+    try {
+        const { username } = req.body;
+        if (!username) {
+            return res.status(400).json({ message: "Username is required" });
+        }
+
+        const user = await UsersAuth.findOne({ username });
+
+        if (!user) {
+            return res.status(200).json({
+                message: "If the account exists, a reset link has been sent to the associated email."
+            });
+        }
+
+        const token = jwt.sign(
+            { userId: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: "15m" }
+        );
+
+        const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+
+        await sendPasswordResetEmail(
+            user.email,
+            user.username,
+            resetLink
+        );
+
+        return res.status(200).json({
+            message: "If the account exists, a reset link has been sent to the associated email."
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            message: "An internal server error occurred"
+        });
+    }
+};
+
+export const resetPassword = async (req, res) => {
+    try {
+        const { token, newPassword } = req.body;
+
+        if (!token || !newPassword) {
+            return res.status(400).json({
+                message: "Missing required fields"
+            });
+        }
+
+        let decoded;
+        try {
+            decoded = jwt.verify(token, process.env.JWT_SECRET);
+        } catch (error) {
+            return res.status(400).json({
+                message: "Link is invalid or has expired"
+            });
+        }
+
+        const user = await UsersAuth.findById(decoded.userId);
+
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found"
+            });
+        }
+
+        user.password = newPassword;
+        await user.save();
+
+        return res.status(200).json({
+            message: "Password reset successfully!"
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            message: "An internal server error occurred"
+        });
     }
 };

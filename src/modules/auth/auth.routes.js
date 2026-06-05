@@ -1,5 +1,5 @@
 import express from "express";
-import {register} from "./auth.controller.js";
+import {register, login, logout , forgotPassword, resetPassword } from "./auth.controller.js";
 
 const router = express.Router();
 
@@ -10,23 +10,15 @@ const router = express.Router();
 // POST /auth/reset-password | Public | reset password using valid token
 // GET /auth/me | Auth required (all roles) | return current authenticated user profile
 
-router.post("/login", (req, res) => {
-    res.json({message: "Login endpoint"});
-});
+router.post("/login", login);
 
 router.post("/register", register);
 
-router.post("/logout", (req, res) => {
-    res.json({message: "Logout endpoint"});
-});
+router.post("/logout", logout);
 
-router.post("/forgot-password", (req, res) => {
-    res.json({message: "Forgot password endpoint"});
-});
+router.post("/forgot-password", forgotPassword);
 
-router.post("/reset-password", (req, res) => {
-    res.json({message: "Reset password endpoint"});
-});
+router.post("/reset-password", resetPassword);
 
 router.get("/me", (req, res) => {
     res.json({message: "Get current user profile endpoint"});
