@@ -33,7 +33,7 @@ import bcrypt from 'bcrypt';
  * @returns {Object} 400 - Validation error
  * @returns {Object} 500 - Server error
  */
-export const register = async (req, res) => {
+export const register = async (req, res, next) => {
     try {
         let { username, password, role, email, ...profileData } = req.body;
 
@@ -87,8 +87,7 @@ export const register = async (req, res) => {
         return res.status(201).json({ message: "User registered successfully." });
 
     } catch (error) {
-        // replace later with error middleware
-        return res.status(500).json({ message: error.message });
+        next(err);
     }
 };
 
@@ -122,7 +121,7 @@ export const register = async (req, res) => {
  * @returns {Object} 400 - Invalid credentials or missing fields
  * @returns {Object} 500 - Server error
  */
-export const login = async (req, res) => {
+export const login = async (req, res, next) => {
     try {
         let { username, password } = req.body;
 
@@ -162,7 +161,7 @@ export const login = async (req, res) => {
             message: "Login successful."
         })
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        next(error);
     }
 };
 
@@ -183,7 +182,7 @@ export const login = async (req, res) => {
  * @returns {Object} 200 - Logout successful
  * @returns {Object} 500 - Server error
  */
-export const logout = async (req, res) => {
+export const logout = async (req, res, next) => {
     try {
         res.clearCookie("token", {
             httpOnly: true,
@@ -195,7 +194,7 @@ export const logout = async (req, res) => {
             message: "Logged out successfully."
         });
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        next(error);
     }
 };
 
@@ -216,7 +215,7 @@ export const logout = async (req, res) => {
  * @returns {Object} 400 - Missing required fields
  * @returns {Object} 500 - Server error
  */
-export const forgotPassword = async (req, res) => {
+export const forgotPassword = async (req, res, next) => {
     try {
         const { username } = req.body;
         if (!username) {
@@ -250,9 +249,7 @@ export const forgotPassword = async (req, res) => {
         });
 
     } catch (error) {
-        return res.status(500).json({
-            message: "An internal server error occurred"
-        });
+        next(error);
     }
 };
 
@@ -274,7 +271,7 @@ export const forgotPassword = async (req, res) => {
  * @returns {Object} 404 - User not found
  * @returns {Object} 500 - Server error
  */
-export const resetPassword = async (req, res) => {
+export const resetPassword = async (req, res, next) => {
     try {
         const { token, newPassword } = req.body;
 
@@ -309,8 +306,6 @@ export const resetPassword = async (req, res) => {
         });
 
     } catch (error) {
-        return res.status(500).json({
-            message: "An internal server error occurred"
-        });
+        next(error);
     }
 };
