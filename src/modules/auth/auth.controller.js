@@ -11,26 +11,28 @@ import jwt from "jsonwebtoken";
 import bcrypt from 'bcrypt';
 
 /**
- * Register a new user.
+ * Register a new user (customer, vendor, or admin).
  *
  * @route POST /auth/register
  *
  * @body {Object} req.body
  * @property {string} username - 5–30 chars, no spaces
- * @property {string} email - valid email format
+ * @property {string} email - valid email format (normalized to lowercase)
  * @property {string} password - minimum 6 characters, no spaces
  * @property {"customer"|"vendor"|"admin"} role - user role
+ * @property {Object} [profileData] - Additional profile fields depending on `role`
  *
- * Rules:
- * - Username must be unique and contain no whitespace; length 5–30 characters
- * - Email is normalized to lowercase
- * - Customers: only one account per email allowed
- * - Vendors: multiple accounts allowed per email (each represents a branch/store)
- * - Vendor accounts start with accountStatus = "pending" and require admin approval
- * - Other roles default to accountStatus = "active"
+ * Role-specific `profileData`:
+ * - Vendor: `{ shopName, phoneNumber, taxNumber, address }` where `address` is `{ governorate, city, neighborhood, detailedAddress }`.
+ * - Customer: `{ name, phoneNumber, address }` where `address` matches the vendor address shape.
  *
- * @returns {Object} 201 - Success message
- * @returns {Object} 400 - Validation error
+ * Notes:
+ * - The endpoint performs server-side validation for all fields and returns a 400 on validation errors.
+ * - Vendor creation is run inside a MongoDB transaction that creates both the auth record and vendor profile atomically.
+ * - `taxNumber` is enforced unique at the DB level; duplicate tax numbers will cause a 400 response if detected pre-insert, or a 500-level error if raised by the DB.
+ *
+ * @returns {Object} 201 - User registered successfully
+ * @returns {Object} 400 - Validation error (missing/invalid fields or duplicate constraints)
  * @returns {Object} 500 - Server error
  */
 export const register = async (req, res, next) => {
