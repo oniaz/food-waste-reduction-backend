@@ -9,7 +9,8 @@ import mongoose from "mongoose";
 export const createOrder = async (req, res, next) => {
     try {
         // Implementation logic to create an order from cart items
-        const { customerId, products, shippingAddress, paymentMethod } = req.body;
+        const customerId = req.user?.id; 
+        const { products, shippingAddress, paymentMethod } = req.body;
         // Validate input, calculate total price, and save the order
         if (!customerId || !products || products.length === 0 ||!Array.isArray(products)|| !shippingAddress || !paymentMethod) {
             return res.status(400).json({ message: "Missing required fields" });
