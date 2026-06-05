@@ -3,7 +3,6 @@ import { validateUsername, validateEmail, validatePassword, validateRole } from 
 import { sendPasswordResetEmail } from "../auth/auth.services.js";
 import jwt from "jsonwebtoken";
 import bcrypt from 'bcrypt';
-// import nodeMailer from "nodemailer";
 
 /**
  * Register a new user.
@@ -203,6 +202,22 @@ export const logout = async (req, res) => {
 };
 
 
+/**
+ * Initiate password reset for a user.
+ *
+ * @route POST /auth/forgot-password
+ *
+ * @body {Object} req.body
+ * @property {string} username - The username to send a reset link for
+ *
+ * Rules:
+ * - Always respond with a generic success message to avoid leaking account existence
+ * - If the account exists a short-lived JWT reset token is generated and emailed
+ *
+ * @returns {Object} 200 - Generic success message (email sent if account exists)
+ * @returns {Object} 400 - Missing required fields
+ * @returns {Object} 500 - Server error
+ */
 export const forgotPassword = async (req, res) => {
     try {
         const { username } = req.body;
@@ -243,6 +258,24 @@ export const forgotPassword = async (req, res) => {
     }
 };
 
+/**
+ * Complete a password reset using a previously issued token.
+ *
+ * @route POST /auth/reset-password
+ *
+ * @body {Object} req.body
+ * @property {string} token - Short-lived JWT token issued by forgot-password flow
+ * @property {string} newPassword - New password to set for the account
+ *
+ * Rules:
+ * - Token is verified with the server JWT secret
+ * - If token is valid, the password is updated and saved
+ *
+ * @returns {Object} 200 - Password reset successfully
+ * @returns {Object} 400 - Missing fields or invalid/expired token
+ * @returns {Object} 404 - User not found
+ * @returns {Object} 500 - Server error
+ */
 export const resetPassword = async (req, res) => {
     try {
         const { token, newPassword } = req.body;
