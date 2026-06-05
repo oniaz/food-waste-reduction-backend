@@ -21,7 +21,8 @@ export const errorMiddleware = (err, req, res, next) => {
 
     if (err?.code === 11000) {
         statusCode = 409;
-        message = 'Resource already exists (duplicate key error)';
+        const fields = err.keyValue ? Object.keys(err.keyValue).join(', ') : 'unique field';
+        message = `Duplicate value for ${fields}`;
     }
 
     if (err?.name === 'ValidationError') {
