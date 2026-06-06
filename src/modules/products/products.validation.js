@@ -18,8 +18,7 @@ export const validateCreateProduct = (req, res, next) => {
     !expiryDate ||
     quantity === undefined ||
     !category ||
-    !imgUrl ||
-    !vendorId
+    !imgUrl
   ) {
     return res
       .status(400)
@@ -28,12 +27,10 @@ export const validateCreateProduct = (req, res, next) => {
 
   // 2. فحص طول اسم المنتج (عشان يطابق الموديل)
   if (productName.trim().length < 3 || productName.trim().length > 50) {
-    return res
-      .status(400)
-      .json({
-        success: false,
-        message: "Product name must be between 3 and 50 characters",
-      });
+    return res.status(400).json({
+      success: false,
+      message: "Product name must be between 3 and 50 characters",
+    });
   }
 
   // 3. فحص التصنيف (Category)
@@ -59,23 +56,19 @@ export const validateCreateProduct = (req, res, next) => {
   // 5. فحص التاريخ (المنتج لازم يكون لسه منتهىش)
   const expiry = new Date(expiryDate);
   if (isNaN(expiry.getTime()) || expiry <= new Date()) {
-    return res
-      .status(400)
-      .json({
-        success: false,
-        message: "Expiry date must be a valid future date",
-      });
+    return res.status(400).json({
+      success: false,
+      message: "Expiry date must be a valid future date",
+    });
   }
 
   // 6. فحص الخصم (لو موجود)
   if (discount !== undefined) {
     if (typeof discount !== "number" || discount < 0 || discount > price) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Invalid discount value (cannot exceed price)",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid discount value (cannot exceed price)",
+      });
     }
   }
 

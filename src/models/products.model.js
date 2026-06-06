@@ -44,6 +44,7 @@ const productSchema = new mongoose.Schema(
     },
     validDate: {
       type: Date,
+      default: Date.now,
     },
     vendorId: {
       type: mongoose.Schema.Types.ObjectId,

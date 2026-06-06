@@ -9,19 +9,23 @@
 import express from "express";
 import * as productController from "./products.controller.js";
 import { validateCreateProduct } from "./products.validation.js";
-
+import authMiddleware from "../../middleware/authentication.middleware.js";
 const router = express.Router();
 
+// Public
 router.get("/search", productController.search);
-
 router.get("/", productController.getAll);
-
 router.get("/:id", productController.getById);
 
-router.post("/", productController.create);
-router.post("/", validateCreateProduct, productController.create);
-router.put("/:id", productController.update);
+// Protected
+router.post(
+  "/",
+  authMiddleware,
+  validateCreateProduct,
+  productController.create,
+);
 
-router.delete("/:id", productController.remove);
+router.put("/:id", authMiddleware, productController.update);
 
+router.delete("/:id", authMiddleware, productController.remove);
 export default router;

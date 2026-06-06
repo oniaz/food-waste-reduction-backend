@@ -1,5 +1,5 @@
 import * as productService from "./products.service.js";
-
+import mongoose from "mongoose";
 /**
  * GET ALL
  */
@@ -37,7 +37,17 @@ export const search = async (req, res, next) => {
  */
 export const getById = async (req, res, next) => {
   try {
-    const product = await productService.getProductById(req.params.id);
+    const { id } = req.params;
+
+    // 🟢 validate ID first
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product ID",
+      });
+    }
+
+    const product = await productService.getProductById(id);
 
     if (!product) {
       return res.status(404).json({
@@ -51,7 +61,7 @@ export const getById = async (req, res, next) => {
       data: product,
     });
   } catch (error) {
-    next(error); // ✅
+    next(error);
   }
 };
 
@@ -60,6 +70,8 @@ export const getById = async (req, res, next) => {
  */
 export const create = async (req, res, next) => {
   try {
+    req.body.vendorId = req.user.id;
+
     const product = await productService.createProduct(req.body);
 
     res.status(201).json({
@@ -67,7 +79,7 @@ export const create = async (req, res, next) => {
       data: product,
     });
   } catch (error) {
-    next(error); // ✅
+    next(error);
   }
 };
 

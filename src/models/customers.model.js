@@ -1,13 +1,6 @@
 import mongoose from "mongoose";
 
 const customersSchema = new mongoose.Schema({
-    email: {
-        type: String,
-        required: true,
-        unique: true, // Unique per customer profile
-        trim: true,
-        lowercase: true
-    },
     name: {
         firstName: {
             type: String,

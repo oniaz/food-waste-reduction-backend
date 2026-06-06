@@ -1,4 +1,8 @@
 import express from "express";
+import {register, login, logout , forgotPassword, resetPassword } from "./auth.controller.js";
+import authenticate from "../../middleware/authentication.middleware.js";
+import authorizeRole from "../../middleware/authorization.middleware.js";
+import authorizeStatus from "../../middleware/status.middleware.js";
 
 const router = express.Router();
 
@@ -9,28 +13,18 @@ const router = express.Router();
 // POST /auth/reset-password | Public | reset password using valid token
 // GET /auth/me | Auth required (all roles) | return current authenticated user profile
 
-router.post("/login", (req, res) => {
-    res.json({message: "Login endpoint"});
-});
+router.post("/login", login);
 
-router.post("/register", (req, res) => {
-    res.json({message: "Register endpoint"});
-});
+router.post("/register", register);
 
-router.post("/logout", (req, res) => {
-    res.json({message: "Logout endpoint"});
-});
+router.post("/logout", authenticate, logout);
 
-router.post("/forgot-password", (req, res) => {
-    res.json({message: "Forgot password endpoint"});
-});
+router.post("/forgot-password", forgotPassword);
 
-router.post("/reset-password", (req, res) => {
-    res.json({message: "Reset password endpoint"});
-});
+router.post("/reset-password", resetPassword);
 
-router.get("/me", (req, res) => {
-    res.json({message: "Get current user profile endpoint"});
-});
+// router.get("/me", authenticate, (req, res) => {
+//     res.json({message: "Get current user profile endpoint"});
+// });
 
 export default router;

@@ -5,7 +5,7 @@ import Products from "../../models/products.model.js";
 export const getAllProducts = async (filters) => {
   const today = new Date();
   const query = {
-    validDate: { $lte: today },
+    validDate: { $gte: today },
     expiryDate: { $gt: today },
     quantity: { $gt: 0 },
   };
