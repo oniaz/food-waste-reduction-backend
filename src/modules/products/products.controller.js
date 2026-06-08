@@ -1,0 +1,183 @@
+import * as productService from "./products.service.js";
+import mongoose from "mongoose";
+/**
+ * Get all products
+ * @route GET /products
+ * @param {Object} req - Express request object (query params for filtering/pagination)
+ * @param {Object} res - Express response object
+ * @param {Function} next - Next middleware
+ * @returns {JSON} List of products
+ */
+export const getAll = async (req, res, next) => {
+  try {
+    const products = await productService.getAllProducts(req.query);
+
+    res.status(200).json({
+      success: true,
+      data: products,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Search products by keyword
+ * @route GET /products/search
+ * @param {Object} req - Express request object (query: q)
+ * @param {Object} res - Express response object
+ * @param {Function} next - Next middleware
+ * @returns {JSON} Filtered products list
+ */
+export const search = async (req, res, next) => {
+  try {
+    const products = await productService.searchProducts(req.query.q);
+
+    res.json({
+      success: true,
+      data: products,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get product by ID
+ * @route GET /products/:id
+ * @param {Object} req - Express request object (params: id)
+ * @param {Object} res - Express response object
+ * @param {Function} next - Next middleware
+ * @returns {JSON} Single product object
+ */
+export const getById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // validate ID first
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product ID",
+      });
+    }
+
+    const product = await productService.getProductById(id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: product,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Create new product
+ * @route POST /products
+ * @param {Object} req - Express request object (body: product data, user from auth)
+ * @param {Object} res - Express response object
+ * @param {Function} next - Next middleware
+ * @returns {JSON} Created product
+ */
+export const create = async (req, res, next) => {
+  try {
+    req.body.vendorId = req.user.id;
+
+    const product = await productService.createProduct(req.body);
+
+    res.status(201).json({
+      success: true,
+      data: product,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update existing product
+ * @route PUT /products/:id
+ * @param {Object} req - Express request object (params: id, body: update data)
+ * @param {Object} res - Express response object
+ * @param {Function} next - Next middleware
+ * @returns {JSON} Updated product
+ */
+export const update = async (req, res, next) => {
+  try {
+    const product = await productService.getProductById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    // ownership check
+    if (product.vendorId.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to update this product",
+      });
+    }
+
+    const updatedProduct = await productService.updateProduct(
+      req.params.id,
+      req.body,
+    );
+
+    res.json({
+      success: true,
+      data: updatedProduct,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete product
+ * @route DELETE /products/:id
+ * @param {Object} req - Express request object (params: id)
+ * @param {Object} res - Express response object
+ * @param {Function} next - Next middleware
+ * @returns {JSON} Deletion result message
+ */
+export const remove = async (req, res, next) => {
+  try {
+    const product = await productService.getProductById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    // ownership check
+    if (product.vendorId.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to delete this product",
+      });
+    }
+
+    await productService.deleteProduct(req.params.id);
+
+    res.json({
+      success: true,
+      message: "Deleted successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};

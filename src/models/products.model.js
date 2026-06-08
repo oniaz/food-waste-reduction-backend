@@ -1,101 +1,109 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
+const COMMISSION_FACTOR = 0.1;
+const categoriesEnum = ["bakery", "dairy", "snacks"];
 
-const categoriesEnum = ["bakery", "dairy", "snacks"]; 
+const productSchema = new mongoose.Schema(
+  {
+    category: {
+      type: String,
+      required: true,
+      enum: categoriesEnum,
+    },
+    productName: {
+      type: String,
+      required: true,
+      trim: true,
+      minlength: 3,
+      maxlength: 50,
+    },
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
 
-const productSchema = new mongoose.Schema({
-    category: { 
-        type: String,
-        required: true,
-        enum: categoriesEnum
+    commission: {
+      type: Number,
+      min: 0,
     },
-    productName: { 
-        type: String,
-        required: true,
-        trim: true,
-        minlength: 3,
-        maxlength: 50
+    discount: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: 0,
+      validate: {
+        validator: function (value) {
+          return value <= this.price; //false if discount is greater than price with commission, which is invalid
+        },
+        message: "Discount cannot be greater than the price with commission.",
+      },
     },
-    priceWithCommission: { 
-        type: Number,
-        required: true,
-        min: 0
+    expiryDate: {
+      type: Date,
+      required: true,
     },
-    discount: { 
-        type: Number,
-        required: true,
-        default: 0,
-        min: 0,
-        validate: {
-            validator: function(value) {
-                return value <= this.priceWithCommission; //false if discount is greater than price with commission, which is invalid
-            },
-            message: "Discount cannot be greater than the price with commission."
-        }
+    validDate: {
+      type: Date,
+      default: Date.now,
     },
-    expiryDate: { 
-        type: Date,
-        required: true
+    vendorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Vendors",
+      required: true,
     },
-    validDate: { 
-        type: Date
-    },
-    vendorId: { 
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Vendors', 
-        required: true
-    },
-    quantity: { 
-        type: Number,
-        required: true,
-        min: 0
+    quantity: {
+      type: Number,
+      required: true,
+      min: 0,
     },
     isDeliverable: {
-        type: Boolean,
-        required: true
+      type: Boolean,
+      required: true,
     },
-    imgUrl: { 
-        type: String,
-        required: true
+    imgUrl: {
+      type: String,
+      required: true,
     },
-    description: { 
-        type: String,
-        trim: true,
-        maxlength: 200
+    description: {
+      type: String,
+      trim: true,
+      maxlength: 200,
     },
-    tags: { 
-        type: [String], 
-    }
-}, { timestamps: true });
+    tags: {
+      type: [String],
+    },
+  },
+  { timestamps: true },
+);
 
+productSchema.pre("save", async function () {
+  // Recalculate if either field is modified, or if validDate doesn't exist yet
+  this.commission = this.price * COMMISSION_FACTOR;
+  const isCategoryChanged = this.isModified("category");
+  const isExpiryChanged = this.isModified("expiryDate");
+  const isValidDateMissing = !this.validDate;
 
-productSchema.pre("save", async function() {
+  if (!isCategoryChanged && !isExpiryChanged && !isValidDateMissing) {
+    return; // Safe to skip only if nothing relevant changed and validDate already exists
+  }
 
-    // Recalculate if either field is modified, or if validDate doesn't exist yet
-    const isCategoryChanged = this.isModified("category");
-    const isExpiryChanged = this.isModified("expiryDate");
-    const isValidDateMissing = !this.validDate;
+  if (!this.expiryDate) return; // If expiryDate is not set, we can't calculate validDate, so we skip the calculation
 
-    if (!isCategoryChanged && !isExpiryChanged && !isValidDateMissing) {
-        return; // Safe to skip only if nothing relevant changed and validDate already exists
-    }
+  //Define subtraction rules per category
+  const daysToSubtractBeforeExpiry = {
+    bakery: 7,
+    dairy: 10,
+    snacks: 30,
+  };
 
-    if (!this.expiryDate) return; // If expiryDate is not set, we can't calculate validDate, so we skip the calculation
+  const bufferDays = daysToSubtractBeforeExpiry[this.category] || 0;
 
-    //Define subtraction rules per category
-    const daysToSubtractBeforeExpiry = {
-        bakery: 7,  
-        dairy: 10,   
-        snacks: 30   
-    };
+  const calculatedDate = new Date(this.expiryDate);
 
-    const bufferDays = daysToSubtractBeforeExpiry[this.category] || 0;
-   
-    const calculatedDate = new Date(this.expiryDate);
-   
-    calculatedDate.setDate(calculatedDate.getDate() - bufferDays); // Subtract the buffer days from the expiry date
-   
-    this.validDate = calculatedDate;   // Update the field natively
+  calculatedDate.setDate(calculatedDate.getDate() - bufferDays); // Subtract the buffer days from the expiry date
+
+  this.validDate = calculatedDate; // Update the field natively
 });
 
-const Products = mongoose.model('Products', productSchema);
+const Products = mongoose.model("Products", productSchema);
 export default Products;
