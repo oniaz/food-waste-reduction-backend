@@ -51,8 +51,9 @@ export const createOrder = async (req, res, next) => {
             verifiedProductsList.push({
                 productId: item.productId,
                 quantity: item.quantity,
-                priceAtPurchase: product.priceWithCommission, // Capture current price for order integrity
-                isCommissioned: false // Default to false
+                // Add price and commission together manually
+                priceAtPurchase: product.price + (product.commission || 0), 
+                isCommissioned: false 
             });
         }
   
@@ -156,41 +157,56 @@ export const getOrderDetails = async (req, res, next) => {
             }
             const order = await Order.findById(orderId).populate({
                 path: 'customerId',
-                select: 'name email' //only name and email of customer are needed in order details response
+                select: 'name phoneNumber' //only name and email of customer are needed in order details response
             }).populate({
                 path: 'products.productId', 
                 populate: {
                     path: 'vendorId', //populate the vendor details of each product in the order
-                    select: 'shopName email detailedAddress' //only shop name and email of vendor are needed in order details response
+                    select: 'shopName phoneNumber detailedAddress' //only shop name and email of vendor are needed in order details response
                 }
             });
             if (!order) {
                 return res.status(404).json({ message: "Order not found" });
             }
-            // --- MULTI-ROLE SECURITY GUARDRAIL ---
-        const currentUserId = req.user?.id;
-        const currentUserRole = req.user?.role;
 
-        //Check if the user is an Admin
-        const isAdmin = currentUserRole === 'admin';
+            // --- MULTI-ROLE SECURITY GUARDRAIL (FIXED) ---
+            const currentUserId = req.user?.id;
+            const currentUserRole = req.user?.role;
 
-        // Check if the user is the Customer who bought it
-        const isCustomerOwner = order.customerId?._id.toString() === currentUserId && currentUserRole === 'customer';
+            // 1. Check if the user is an Admin
+            const isAdmin = currentUserRole === 'admin';
 
-        // Check if the user is a Vendor AND they own one of the products in this order
-        const isSellerInvolved = currentUserRole === 'vendor' && order.products.some(item => { 
-            const vendorId = item.productId?.vendorId?._id || item.productId?.vendorId;
-            return vendorId?.toString() === currentUserId;
-        });
+            // 2. Check if the user is the Customer who bought it (Safe string conversion)
+            const orderCustomerStrId = order.customerId?._id ? order.customerId._id.toString() : order.customerId?.toString();
+            const isCustomerOwner = currentUserRole === 'customer' && orderCustomerStrId === currentUserId;
 
-        // If the current user is NOT an admin, NOT the buyer, and NOT an involved seller... block them!
-        if (!isAdmin && !isCustomerOwner && !isSellerInvolved) {
-            return res.status(403).json({ message: "Forbidden: You do not have permission to view this order" });
-        }
-        return res.status(200).json({
-            success: true,
-            order
-        });
+            // 3. Check if the user is an involved Vendor
+            const isSellerInvolved = currentUserRole === 'vendor' && order.products.some(item => { 
+                const vendorRef = item.productId?.vendorId;
+                
+                if (!vendorRef) return false; // Skip if product has no vendor assignment safely
+
+                // If deeply populated, grab ._id. If unpopulated, grab the raw ID value
+                const vendorStrId = (typeof vendorRef === 'object' && '_id' in vendorRef) 
+                    ? vendorRef._id.toString() 
+                    : vendorRef.toString();
+
+                return vendorStrId === currentUserId;
+            });
+
+            // If the current user is NOT an admin, NOT the buyer, and NOT an involved seller... block them!
+            if (!isAdmin && !isCustomerOwner && !isSellerInvolved) {
+                return res.status(403).json({ 
+                    success: false,
+                    message: "Forbidden: You do not have permission to view this order" 
+                });
+            }
+
+            // Security passed! Send response
+            return res.status(200).json({
+                success: true,
+                order
+    });
 
     } catch (error) {
         next(error);
@@ -249,7 +265,7 @@ export const getSellerOrders = async (req, res, next) => {
         .limit(limit)
         .populate({
             path: 'customerId',
-            select: 'name email'
+            select: 'name phoneNumber'
         })
         .populate({
             path: 'products.productId',
@@ -412,8 +428,8 @@ export const updateOrderStatus = async (req, res, next) => {
         }
 
         const isSellerInvolved = currentUserRole === 'vendor' && order.products.some(item => { 
-            const vendorId = item.productId?.vendorId?._id || item.productId?.vendorId;
-            return vendorId?.toString() === currentUserId;
+        const vendorStringId = item.productId?.vendorId?.toString();
+        return vendorStringId === currentUserId;
         });
 
         if (currentUserRole === 'vendor' && !isSellerInvolved) {
