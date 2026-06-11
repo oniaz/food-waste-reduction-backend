@@ -8,6 +8,26 @@ import UsersAuth from "../../models/usersAuth.model.js";
 import bcrypt from 'bcrypt';
 
 // GET /users/me | Auth required (all roles) | get current user profile with role data
+/**
+ * @api {get} /api/users/me Get Current User Profile
+ * @apiName GetCurrentUser
+ * @apiGroup Users
+ * @apiPermission customer | vendor
+ * @description Retrieves the active user's profile details based on their authenticated token context.
+ * It dynamically forks execution path behavior based on user roles:
+ * 1. For Vendors: Fetches raw data using optimized lean queries and injects a dynamically computed rating score average.
+ * 2. For Customers: Fetches core user details natively via clean document separation.
+ * @param {import('express').Request} req - Express request object.
+ * @param {Object} req.user - Authenticated user payload injected by auth middleware.
+ * @param {string} req.user.id - The unique MongoDB ObjectId of the requesting actor.
+ * @param {string} req.user.role - The system access tier role of the user ('customer' or 'vendor').
+ * @param {import('express').Response} res - Express response object used to return JSON payloads.
+ * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
+ * @returns {Promise<void>} Sends a JSON response with status 200 containing either 'sellerData' or 'customerData'.
+ * @throws {401} If the user payload session data cannot be parsed or verified by authentication guards.
+ * @throws {403} If the parsed user role does not have authorization clearance to hit the endpoint.
+ * @throws {404} If the underlying model document corresponding to the user ID is missing from the database.
+ */
 export const getCurrentUser = async (req, res, next) => {
     try {
         const currentUserRole = req.user?.role;
@@ -50,7 +70,6 @@ export const getCurrentUser = async (req, res, next) => {
             if (!customerData) {
                 return res.status(404).json({ message: "Customer profile not found" });
             }
-            //didn't handel loyalty points yet because still thinking about them//
             return res.status(200).json({
                 success: true,
                 customerData
@@ -63,6 +82,34 @@ export const getCurrentUser = async (req, res, next) => {
 };
 
 // PATCH /users/me | Auth required (all roles) | update own profile information
+/**
+ * @api {patch} /api/users/me Update Current User Profile
+ * @apiName UpdateUserInfo
+ * @apiGroup Users
+ * @apiPermission customer | vendor
+ * @description Modifies specific personal profile details for the authenticated user session. 
+ * This endpoint implements strict structural security validation patterns:
+ * 1. Isolates payload parsing by role: Vendors may only modify 'shopName', 'address', and 'phoneNumber'. Customers may only modify 'name', 'address', and 'phoneNumber'.
+ * 2. Automatically strips out 'undefined' properties from the tracking payload map.
+ * 3. Demands that at least one valid key remains post-filtering to avoid wasting database writes.
+ * 4. Natively applies Mongoose schema validators on the dynamic fields before modifying the records.
+ * @param {import('express').Request} req - Express request object.
+ * @param {Object} req.body - The request body payload containing optional fields to modify.
+ * @param {string} [req.body.name] - The new name configuration (Customer only).
+ * @param {string} [req.body.shopName] - The new marketplace business name (Vendor only).
+ * @param {string} [req.body.address] - The updated default residential or business location string.
+ * @param {string} [req.body.phoneNumber] - The updated mobile communication line digits.
+ * @param {Object} req.user - Authenticated user payload injected by auth middleware.
+ * @param {string} req.user.id - The unique MongoDB ObjectId of the target profile owner.
+ * @param {string} req.user.role - The internal authentication role level tier ('customer' or 'vendor').
+ * @param {import('express').Response} res - Express response object used to return JSON payloads.
+ * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
+ * @returns {Promise<void>} Sends a JSON response with status 200 along with the cleanly parsed updated data profile snapshot.
+ * @throws {400} If no valid, role-approved parameters are present post-filtering, or if inputs fail base type schema constraints.
+ * @throws {401} If the core identity payload values are missing from the request middleware context.
+ * @throws {403} If the matching authenticated system role is barred from mutating basic resource models.
+ * @throws {404} If the underlying model document corresponding to the parameter index does not exist within the collection.
+ */
 export const updateUserInfo = async (req, res, next) => {
     try {
         const currentUserRole = req.user?.role;
@@ -132,6 +179,33 @@ export const updateUserInfo = async (req, res, next) => {
 };
 
 // PATCH /users/change-password | Auth required (all roles) | change password with old password verification
+/**
+ * @api {patch} /api/users/change-password Change Password
+ * @apiName ChangePassword
+ * @apiGroup Users
+ * @apiPermission customer | vendor
+ * @description Securely updates an authenticated user's account password.
+ * This endpoint enforces multi-layered credential validation sequences:
+ * 1. Checks route safety parameters ensuring both old and new plain text strings exist.
+ * 2. Fetches the calling identity snapshot from specific role tables ('Vendor' or 'Customer') targeting only the required 'authId' relational link.
+ * 3. References the centralized 'UsersAuth' collection to retrieve current encrypted credential hashes.
+ * 4. Executes an asynchronous, non-blocking cryptographic match verify using bcrypt.
+ * 5. Re-assigns and saves the new credential, natively triggering any upstream hashing 'pre-save' middleware configurations.
+ * @param {import('express').Request} req - Express request object.
+ * @param {Object} req.body - The request body payload.
+ * @param {string} req.body.oldPassword - The active plain text password currently securing the profile.
+ * @param {string} req.body.newPassword - The target plain text replacement password.
+ * @param {Object} req.user - Authenticated user payload injected by auth middleware.
+ * @param {string} req.user.id - The unique MongoDB ObjectId of the requesting role profile document.
+ * @param {string} req.user.role - The authorized system permission tier of the user ('customer' or 'vendor').
+ * @param {import('express').Response} res - Express response object used to return JSON payloads.
+ * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
+ * @returns {Promise<void>} Sends a JSON response with status 200 confirming successful credential mutation.
+ * @throws {400} If required string inputs are missing, formatted improperly, or if the current password verification fails bcrypt cross-referencing.
+ * @throws {401} If the request context is missing active user authentication metadata.
+ * @throws {403} If the underlying security role level does not possess clearance to execute credential changes.
+ * @throws {404} If either the secondary profile record or primary matching auth collection entity cannot be found.
+ */
 export const changePassword = async (req, res, next) => {
     try {
         const currentUserRole = req.user?.role;
@@ -190,7 +264,32 @@ export const changePassword = async (req, res, next) => {
         next(error);
     }
 };
-// GET /users | Auth required (admin) | get all vendors list
+// GET /get-vendors | Auth required (admin) | get all vendors list
+/**
+ * @api {get} /api/users/get-vendors Get All Vendors
+ * @apiName GetAllVendors
+ * @apiGroup Users
+ * @apiPermission admin
+ * @description Retrieves a paginated matrix of all registered marketplace vendor records.
+ * This dashboard endpoint applies administrative workflow and performance layout logic:
+ * 1. Enforces absolute authorization lockouts restricting execution exclusively to administrative tokens.
+ * 2. Parses string-based query parameters securely into dynamic numerical pagination keys ('page', 'limit').
+ * 3. Implements non-blocking skips and scale restrictions to minimize bandwidth allocation.
+ * 4. Sorts output lists in descending order based on total 'moneyOwed' ledger status parameters.
+ * 5. Returns a rich, descriptive meta-pagination wrapper alongside the list array payload.
+ * @param {import('express').Request} req - Express request object.
+ * @param {Object} req.query - URL query configuration strings.
+ * @param {number} [req.query.page=1] - The sequential chunk section page index to retrieve.
+ * @param {number} [req.query.limit=10] - The maximum sizing ceiling of structural records per array chunk.
+ * @param {Object} req.user - Authenticated user payload injected by auth middleware.
+ * @param {string} req.user.authId - The primary unique matching global credential record link identifier.
+ * @param {string} req.user.role - The authorization system role string of the active entity ('admin').
+ * @param {import('express').Response} res - Express response object used to return JSON payloads.
+ * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
+ * @returns {Promise<void>} Sends a JSON response with status 200 detailing the total database record inventory count alongside the paginated vendor block.
+ * @throws {401} If session credential links are missing or corrupted post-middleware evaluation.
+ * @throws {403} If the underlying request payload claims an access tier other than 'admin'.
+ */
 export const getAllVendors = async (req, res, next) => {
     try {
         const currentUserRole = req.user?.role;
@@ -235,6 +334,31 @@ export const getAllVendors = async (req, res, next) => {
     }
 };
 // GET /users/customers | Auth required (admin) | get all customers list with pagination
+/**
+ * @api {get} /api/users/customers Get All Customers
+ * @apiName GetAllCustomers
+ * @apiGroup Users
+ * @apiPermission admin
+ * @description Retrieves a paginated list matrix of all registered marketplace customer records.
+ * This endpoint provides administrative overview tracking through specialized data behaviors:
+ * 1. Restricts caller context explicitly to admin roles, rejecting unauthorized entry.
+ * 2. Parses string-based query parameters safely into base-10 numerical indices ('page', 'limit').
+ * 3. Utilizes lean database scans alongside skip and allocation ceilings to guarantee minimal memory overhead.
+ * 4. Sorts output lists chronologically in descending order to surface the most recent signups first.
+ * 5. Returns a rich, descriptive meta-pagination wrapper alongside the customers list array block.
+ * @param {import('express').Request} req - Express request object.
+ * @param {Object} req.query - URL query parameter keys.
+ * @param {number} [req.query.page=1] - The current target slice chunk page index to retrieve.
+ * @param {number} [req.query.limit=10] - The maximum capacity ceiling of customer entries per page window.
+ * @param {Object} req.user - Authenticated user payload injected by auth middleware.
+ * @param {string} req.user.authId - The primary unique matching global credential record link identifier.
+ * @param {string} req.user.role - The authorization system role string of the active entity ('admin').
+ * @param {import('express').Response} res - Express response object used to transmit JSON payloads.
+ * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
+ * @returns {Promise<void>} Sends a JSON response with status 200 detailing structural meta-pagination indices and the customer document list.
+ * @throws {401} If session credential links are missing or corrupted post-middleware validation.
+ * @throws {403} If the incoming actor's permission profile role is anything other than 'admin'.
+ */
 export const getAllCustomers = async (req, res, next) => {
     try {
         const currentUserRole = req.user?.role;
@@ -279,6 +403,28 @@ export const getAllCustomers = async (req, res, next) => {
     }
 };
 // GET /users/seller-dashboard | Auth required (seller) | get seller analytics summary
+/**
+ * @api {get} /api/users/seller-dashboard Get Seller Analytics Summary
+ * @apiName GetSellerAnalytics
+ * @apiGroup Users
+ * @apiPermission vendor
+ * @description Compiles an analytical performance dashboard metric snapshot for the authenticated vendor.
+ * This endpoint processes embedded document loops to extract key-performance indicators (KPIs):
+ * 1. Queries the collections to find any multi-item order referencing the active vendor's product ID criteria.
+ * 2. Parses the transactional items block to separate active processing quantities ('pending', 'ready') from archived history ('completed').
+ * 3. Deducts the platform's 10% commission fee to dynamically aggregate net financial payout metrics (90% revenue retained).
+ * 4. Utilizes a unique hash Set collection to accurately deduce the total number of distinct customers served.
+ * 5. Applies an arithmetic precision rounding scale to protect return floating-point totals.
+ * @param {import('express').Request} req - Express request object.
+ * @param {Object} req.user - Authenticated user payload injected by auth middleware.
+ * @param {string} req.user.id - The unique MongoDB ObjectId of the vendor requesting analytics.
+ * @param {string} req.user.role - The authorized system permission tier role of the user ('vendor').
+ * @param {import('express').Response} res - Express response object used to return JSON payloads.
+ * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
+ * @returns {Promise<void>} Sends a JSON response with status 200 containing an 'analytics' data map showing net profit, rolling product inventory stats, and customer counts.
+ * @throws {401} If identity profile context links are absent from the session middleware payload.
+ * @throws {403} If the incoming actor's permission profile role is anything other than 'vendor'.
+ */
 export const getSellerAnalytics = async (req, res, next) => {
     try {
         const currentUserRole = req.user?.role;
