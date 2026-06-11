@@ -5,28 +5,29 @@ import Vendor from "../../models/vendors.model.js";
 import express from "express";
 import mongoose from "mongoose";
 
-// POST /orders | Auth required (customer) | create order from cart items
+// POST /orders | Auth required (customer) | Create order from cart items
 /**
  * @api {post} /api/orders Create Order
  * @apiName CreateOrder
  * @apiGroup Orders
  * @apiPermission customer
- * * @description Validates cart items, verifies product pricing, creates a new pending order 
- * document, and sequentially decrements the product inventory stock counts.
+ * * @description Validates incoming cart items, evaluates transactional customer pricing by accounting 
+ * for base prices, flat commissions, and active flat promotional discounts, saves the finalized 
+ * pending order record, and sequentially updates matching product document inventory stocks.
  * * @param {import('express').Request} req - Express request object.
- * @param {Object} req.user - Authenticated user payload injected by auth middleware.
- * @param {string} req.user.id - The unique MongoDB ObjectId of the customer.
+ * @param {Object} req.user - Authenticated user payload injected by your auth middleware.
+ * @param {string} req.user.id - The unique MongoDB ObjectId of the customer checking out.
  * @param {Object} req.body - The request body payload.
- * @param {Array<Object>} req.body.products - List of items being checked out.
+ * @param {Array<Object>} req.body.products - Array of item configurations being purchased.
  * @param {string} req.body.products[].productId - The MongoDB ObjectId of the target product.
- * @param {number} req.body.products[].quantity - The amount of units requested by the user.
- * @param {string} req.body.shippingAddress - Delivery destination details.
- * @param {string} req.body.paymentMethod - Choice of payment method (e.g., 'Cash on Delivery').
- * * @param {import('express').Response} res - Express response object used to return JSON payloads.
- * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
- * * @returns {Promise<void>} Sends a JSON response with status 201 on success, or passes errors to next().
- * * @throws {400} If missing required body keys, if the payload formatting is invalid, or if product quantities exceed active stock capacity.
- * @throws {404} If a specific product ID specified within the payload does not exist in the database.
+ * @param {number} req.body.products[].quantity - The physical amount of units requested.
+ * @param {string} req.body.shippingAddress - The physical destination details for order shipment.
+ * @param {string} req.body.paymentMethod - Choice of payment method (e.g., 'credit_card', 'cash_on_delivery').
+ * * @param {import('express').Response} res - Express response object used to return JSON data.
+ * @param {import('express').NextFunction} next - Express next middleware function for centralized global error management.
+ * * @returns {Promise<void>} Sends a JSON response with status code 201 along with the created order object on success.
+ * * @throws {400} If missing required payload fields, if input types are invalid, or if unit quantities violate stock limits.
+ * @throws {404} If any specific product ID provided within the client payload cannot be found inside the database.
  */
 export const createOrder = async (req, res, next) => {
     try {
@@ -362,18 +363,19 @@ export const cancelOrder = async (req, res, next) => {
     } 
 };
 
- // PATCH /orders/:id/status | Auth required (seller owner, admin) | update order status lifecycle
- /**
+// PATCH /orders/:id/status | Auth required (seller owner, admin) | Update order status lifecycle
+/**
  * @api {patch} /api/orders/:id/status Update Order Status
  * @apiName UpdateOrderStatus
  * @apiGroup Orders
  * @apiPermission admin | vendor
- * * @description Updates the tracking status lifecycle state of a specific order. 
+ * @description Updates the tracking status lifecycle state of a specific order. 
  * This endpoint enforces strict multi-role permission loops and operational validation rules:
  * 1. Restricts caller scope to 'admin' or an involved 'vendor' who owns a product inside the order.
  * 2. Explicitly rejects incoming requests setting status to 'cancelled' (directing clients to use the explicit cancellation route).
  * 3. Enforces an immutability state-lock preventing any status updates if the order is already 'completed' or 'cancelled'.
- * * @param {import('express').Request} req - Express request object.
+ * 4. When status is transitioned to 'completed', dynamically increments customer loyalty points and executes an atomic multi-vendor platform commission ledger bulk write.
+ * @param {import('express').Request} req - Express request object.
  * @param {Object} req.params - URL route parameters.
  * @param {string} req.params.id - The unique MongoDB ObjectId of the target order.
  * @param {Object} req.body - The request body payload.
@@ -381,10 +383,10 @@ export const cancelOrder = async (req, res, next) => {
  * @param {Object} req.user - Authenticated user payload injected by auth middleware.
  * @param {string} req.user.id - The unique MongoDB ObjectId of the active actor.
  * @param {string} req.user.role - The authorization system role of the user ('admin' or 'vendor').
- * * @param {import('express').Response} res - Express response object used to return JSON payloads.
+ * @param {import('express').Response} res - Express response object used to return JSON payloads.
  * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
- * * @returns {Promise<void>} Sends a JSON response with status 200 on successful state change, or passes errors to next().
- * * @throws {400} If parameters fail structural ID validation, the target status is missing/invalid, a client passes 'cancelled', or the order state is immutable.
+ * @returns {Promise<void>} Sends a JSON response with status 200 on successful state change, or passes errors to next().
+ * @throws {400} If parameters fail structural ID validation, the target status is missing/invalid, a client passes 'cancelled', or the order state is immutable.
  * @throws {403} If the actor is neither an administrator nor a vendor associated with items inside the target order.
  * @throws {404} If no order corresponds to the provided database ObjectId parameter.
  */
