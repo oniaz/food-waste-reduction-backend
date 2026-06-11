@@ -48,11 +48,12 @@ export const createOrder = async (req, res, next) => {
             if ((item.quantity < 1)|| (item.quantity > product.quantity)) {
                 return res.status(400).json({ message: `Invalid quantity for product ID ${item.productId}` });
             }
+            const finalCustomerPrice = product.price + (product.commission || 0) - (product.discount || 0);
             verifiedProductsList.push({
                 productId: item.productId,
+                vendorId: product.vendorId, //added to match schema edit
                 quantity: item.quantity,
-                // Add price and commission together manually
-                priceAtPurchase: product.price + (product.commission || 0), 
+                priceAtPurchase: parseFloat(Math.max(0, finalCustomerPrice).toFixed(2)),
                 isCommissioned: false 
             });
         }
@@ -402,7 +403,6 @@ export const updateOrderStatus = async (req, res, next) => {
             return res.status(400).json({ message: "Invalid or missing status value" });
         }
         
-        // FIX: Only intercept 'cancelled' here. Let 'completed' pass through to the database update.
         if (status === 'cancelled') {
             return res.status(400).json({ message: "Use the cancel endpoint to cancel orders" });
         }
@@ -411,15 +411,12 @@ export const updateOrderStatus = async (req, res, next) => {
             return res.status(403).json({ message: "Forbidden: Only admins and vendors can update order status" });
         }
 
-        const order = await Order.findById(orderId).populate({
-            path: 'products.productId',
-            select: 'vendorId'
-        });
+        //OPTIMIZATION: No more deep populating! Just grab the raw order document.
+        const order = await Order.findById(orderId);
 
         if (!order) {
             return res.status(404).json({ message: "Order not found" });
         }
-
         
         if (order.status === 'cancelled' || order.status === 'completed') {
             return res.status(400).json({ 
@@ -427,9 +424,9 @@ export const updateOrderStatus = async (req, res, next) => {
             });
         }
 
+        // OPTIMIZATION: item.vendorId is now natively in schema, so we check it directly
         const isSellerInvolved = currentUserRole === 'vendor' && order.products.some(item => { 
-        const vendorStringId = item.productId?.vendorId?.toString();
-        return vendorStringId === currentUserId;
+            return item.vendorId?.toString() === currentUserId;
         });
 
         if (currentUserRole === 'vendor' && !isSellerInvolved) {
@@ -441,6 +438,60 @@ export const updateOrderStatus = async (req, res, next) => {
             { $set: { status: status } },
             { new: true, runValidators: true }
         );
+
+        if (status === "completed") {
+         
+            // 1. CUSTOMER LOYALTY POINTS 
+
+            let totalPrice = 0;
+            for (let i = 0; i < order.products.length; i++) {
+                totalPrice += order.products[i].priceAtPurchase * order.products[i].quantity;
+            }
+            
+            const pointsToAward = Math.floor(totalPrice * 0.01);
+            if (pointsToAward > 0) {
+                await Customer.findByIdAndUpdate(order.customerId, {
+                    $inc: { loyaltyPoints: pointsToAward }
+                });
+            }
+            
+     
+            // 2. VENDOR COMMISSION  (BULK WRITE)
+            const vendorSalesMap = {};
+            
+            order.products.forEach(item => {
+                // OPTIMIZATION: Natively reading item.vendorId from your updated schema!
+                const vId = item.vendorId?.toString();
+                
+                if (vId) {
+                    const itemTotal = item.priceAtPurchase * item.quantity;
+                    if (!vendorSalesMap[vId]) {
+                        vendorSalesMap[vId] = 0;
+                    }
+                    vendorSalesMap[vId] += itemTotal;
+                }
+            });
+
+            const bulkOperations = Object.keys(vendorSalesMap).map(vId => {
+                const grossSales = vendorSalesMap[vId];
+                const platformDebt = parseFloat((grossSales * 0.1).toFixed(2)); 
+
+                return {
+                    updateOne: {
+                        filter: { _id: vId }, 
+                        update: {
+                            $inc: {
+                                moneyOwed: platformDebt 
+                            }
+                        }
+                    }
+                };
+            });
+
+            if (bulkOperations.length > 0) {
+                await Vendor.bulkWrite(bulkOperations);
+            }            
+        }
 
         return res.status(200).json({
             success: true,
