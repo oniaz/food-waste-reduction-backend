@@ -4,6 +4,8 @@ import Customer from "../../models/customers.model.js";
 import Vendor from "../../models/vendors.model.js";
 import express from "express";
 import mongoose from "mongoose";
+import UsersAuth from "../../models/usersAuth.model.js";
+import bcrypt from 'bcrypt';
 
 // GET /users/me | Auth required (all roles) | get current user profile with role data
 export const getCurrentUser = async (req, res, next) => {
@@ -127,4 +129,64 @@ export const updateUserInfo = async (req, res, next) => {
     } catch (error) {
          next(error); 
     } 
+};
+
+// PATCH /users/change-password | Auth required (all roles) | change password with old password verification
+export const changePassword = async (req, res, next) => {
+    try {
+        const currentUserRole = req.user?.role;
+        const userId = req.user?.id;
+        const { oldPassword, newPassword } = req.body;
+        
+
+        
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
+        }
+        if (currentUserRole !== 'vendor' && currentUserRole !== 'customer') {
+            return res.status(403).json({ message: "Forbidden: Unauthorized access" });
+        }
+        if (!oldPassword || !newPassword) {
+            return res.status(400).json({ message: "Bad Request: Missing required parameters" });
+        }
+        if (typeof oldPassword !== 'string' || typeof newPassword !== 'string') {
+            return res.status(400).json({ 
+                message: "Bad Request: Password fields must be valid text strings." 
+            });
+        }
+
+        
+        let profile;
+        if (currentUserRole === "vendor") {
+            profile = await Vendor.findById(userId).select("authId");
+        } else if (currentUserRole === "customer") {
+            profile = await Customer.findById(userId).select("authId");
+        }
+
+        if (!profile || !profile.authId) {
+            return res.status(404).json({ message: "authentication record not found" });
+        }
+
+        
+        const userAuth = await UsersAuth.findById(profile.authId);
+        if (!userAuth) {
+            return res.status(404).json({ message: "Authentication record not found" });
+        }
+
+        
+        const isMatch = await bcrypt.compare(oldPassword, userAuth.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: "Can not change password" });
+        }
+        userAuth.password = newPassword;
+        await userAuth.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Password changed successfully"
+        });
+
+    } catch (error) {
+        next(error);
+    }
 };
