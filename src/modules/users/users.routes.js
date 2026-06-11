@@ -1,5 +1,5 @@
 import express from "express";
-import {getCurrentUser , updateUserInfo} from "./users.controller.js";
+import {getCurrentUser , updateUserInfo, changePassword} from "./users.controller.js";
 import authenticate from "../../middleware/authentication.middleware.js" 
 import authorizeRole from "../../middleware/authorization.middleware.js"
 
@@ -15,9 +15,7 @@ router.get("/me", authenticate, getCurrentUser);
 
 router.patch("/me", authenticate, updateUserInfo);
 
-router.patch("/change-password", (req, res) => {
-    res.json({message: "Change password endpoint"});
-});
+router.patch("/change-password",authenticate,changePassword)
 
 router.get("/seller-dashboard", (req, res) => {
     res.json({message: "Seller dashboard endpoint"});
