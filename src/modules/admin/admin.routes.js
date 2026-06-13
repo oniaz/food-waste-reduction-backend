@@ -1,5 +1,5 @@
 import express from "express";
-import {getPendingSellers , changeSellerStatus} from "./admin.controller.js"
+import {getPendingSellers , changeSellerStatus , getAllLogs} from "./admin.controller.js"
 import authenticate from "../../middleware/authentication.middleware.js" 
 import authorizeRole from "../../middleware/authorization.middleware.js"
 const router = express.Router();
@@ -12,10 +12,7 @@ const router = express.Router();
 router.get("/pending-sellers", authenticate,authorizeRole("admin"),getPendingSellers)
 router.patch("/sellers/:sellerId/status", authenticate,authorizeRole("admin"),changeSellerStatus)
 
-router.get("/logs", (req, res) => {
-    res.json({message: "Get all admin logs endpoint"});
-});
-
+router.get("/logs", authenticate,authorizeRole("admin"),getAllLogs)
 router.get("/:id/logs", (req, res) => {
     res.json({message: "Get specific admin logs endpoint"});
 });
