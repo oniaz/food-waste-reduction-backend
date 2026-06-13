@@ -13,7 +13,7 @@ export async function registerUser({ username, password, role, email, profileDat
     try {
         if (role === "customer") {
             const existingCustomer = await UsersAuth.findOne({ email, role: "customer" }).session(session);
-            if (existingCustomer) throw { status: 400, message: "Customer already exists with this email." };
+            if (existingCustomer) throw { status: 400, message: "Customer account already exists with this email. Only one customer account per email is allowed." };
         }
 
         // commented out until admin approval flow is implemented
