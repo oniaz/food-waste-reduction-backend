@@ -187,4 +187,56 @@ export const getAllLogs = async (req, res, next) => {
         next(error); 
     }
 };
+// GET /admin/:id/logs | Auth required (admin) | get logs for specific admin user 
+export const getAdminLogs = async (req, res, next) => { 
+    try {
+        const currentUserRole = req.user?.role;
+        const currentAuthId = req.user?.authId;
+        const targetAdminAuthId = req.params.id;  //admin Id from admin table
+        
+        // Authorization Guards
+        if (!currentAuthId) {
+            return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
+        }
+        if (currentUserRole !== 'admin') {
+            return res.status(403).json({ message: "Forbidden: Unauthorized access" });
+        }
+        if (!mongoose.Types.ObjectId.isValid(targetAdminAuthId)) {
+            return res.status(400).json({ message: "Invalid Admin ID format" });
+        }
 
+        const adminProfile = await Admin.findById(targetAdminAuthId);
+        if (!adminProfile) {
+            return res.status(404).json({ message: "Admin profile not found" });
+        }
+
+        const page = parseInt(req.query.page, 10) || 1;   
+        const limit = parseInt(req.query.limit, 10) || 10; 
+        const skip = (page - 1) * limit;
+
+        const logQuery = { adminId: adminProfile._id };
+        const totalLogs = await Logs.countDocuments(logQuery); 
+
+        const logs = await Logs.find(logQuery)
+            .sort({ createdAt: -1 }) 
+            .skip(skip)
+            .limit(limit)
+            .lean(); 
+
+        return res.status(200).json({
+            success: true,
+            pagination: {
+                totalLogs,
+                currentPage: page,
+                totalPages: Math.ceil(totalLogs / limit),
+                limit
+            },
+            count: logs.length,
+            logs
+        });
+
+    } catch (error) {
+        console.log(error);
+        next(error); 
+    }
+};
