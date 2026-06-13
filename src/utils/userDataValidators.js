@@ -1,3 +1,5 @@
+import egyptLocations from '../data/egyptLocations.js';
+
 export function validateUsername(username) {
     if (username.length < 5 || username.length > 30) {
         return "Username must be between 5 and 30 characters.";
@@ -51,6 +53,37 @@ export function validateAddress(address) {
     if (!neighborhood?.trim()) return "address: neighborhood is required.";
     if (!detailedAddress?.trim()) return "address: detailedAddress is required.";
     if (detailedAddress.trim().length > 200) return "address: detailedAddress max 200 characters.";
+
+    const govTrimmed = governorate.trim();
+    const cityTrimmed = city.trim();
+    const neighborhoodTrimmed = neighborhood.trim();
+
+    const foundGov = egyptLocations.find(g =>
+        g.governorateName.toLowerCase().includes(govTrimmed.toLowerCase()) ||
+        g.governorateId.toLowerCase() === govTrimmed.toLowerCase()
+    );
+
+    if (!foundGov) {
+        return `address: '${govTrimmed}' is not a valid or supported governorate.`;
+    }
+
+    const foundCity = foundGov.cities.find(c =>
+        c.cityName.toLowerCase() === cityTrimmed.toLowerCase() ||
+        c.cityId.toLowerCase() === cityTrimmed.toLowerCase()
+    );
+
+    if (!foundCity) {
+        return `address: City '${cityTrimmed}' is invalid or does not belong to ${foundGov.governorateName.split(' ')[0]}.`;
+    }
+
+    const isNeighborhoodValid = foundCity.neighborhoods.some(n =>
+        n.toLowerCase().includes(neighborhoodTrimmed.toLowerCase())
+    );
+
+    if (!isNeighborhoodValid) {
+        return `address: Neighborhood '${neighborhoodTrimmed}' is invalid or does not exist inside ${foundCity.cityName}.`;
+    }
+
     return null;
 }
 
