@@ -145,3 +145,46 @@ export const changeSellerStatus = async (req, res, next) => {
         next(error);
     }
 };
+// GET /admin/logs | Auth required (admin) | get all system admin logs
+export const getAllLogs = async (req, res, next) => { 
+    try {
+        const currentUserRole = req.user?.role;
+        const authId = req.user?.authId;
+        
+        if (!authId) {
+            return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
+        }
+        if (currentUserRole !== 'admin') {
+            return res.status(403).json({ message: "Forbidden: Unauthorized access" });
+        }
+
+        const page = parseInt(req.query.page, 10) || 1;   
+        const limit = parseInt(req.query.limit, 10) || 10; 
+        const skip = (page - 1) * limit;
+
+        const totalLogs = await Logs.countDocuments(); 
+
+        const logs = await Logs.find()
+            .sort({ createdAt: -1 }) // -1 sorts descending (newest first)
+            .skip(skip)
+            .limit(limit)
+            .lean(); // Converts Mongoose docs to lightweight JSON objects
+
+    
+        return res.status(200).json({
+            success: true,
+            pagination: {
+                totalLogs,
+                currentPage: page,
+                totalPages: Math.ceil(totalLogs / limit),
+                limit
+            },
+            count: logs.length,
+            logs
+        });
+
+    } catch (error) {
+        next(error); 
+    }
+};
+
