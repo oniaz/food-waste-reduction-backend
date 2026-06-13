@@ -6,6 +6,7 @@ import express from "express";
 import mongoose from "mongoose";
 import UsersAuth from "../../models/usersAuth.model.js";
 import bcrypt from 'bcrypt';
+import { validateName, validateShopName, validatePhoneNumber, validateAddress } from "../../utils/userDataValidators.js";
 
 // GET /users/me | Auth required (all roles) | get current user profile with role data
 /**
@@ -142,6 +143,19 @@ export const updateUserInfo = async (req, res, next) => {
         if (Object.keys(allowedUpdates).length === 0) { // Check if there's actually anything to update
             return res.status(400).json({ message: "Bad Request: No valid fields provided for update" });
         }
+
+        let validationError = null;
+        if (allowedUpdates.shopName) validationError = validateShopName(allowedUpdates.shopName, true);
+        if (validationError) return res.status(400).json({ message: validationError });
+
+        if (allowedUpdates.name) validationError = validateName(allowedUpdates.name, true);
+        if (validationError) return res.status(400).json({ message: validationError });
+
+        if (allowedUpdates.phoneNumber) validationError = validatePhoneNumber(allowedUpdates.phoneNumber, true);
+        if (validationError) return res.status(400).json({ message: validationError });
+
+        if (allowedUpdates.address) validationError = validateAddress(allowedUpdates.address, true);
+        if (validationError) return res.status(400).json({ message: validationError });
 
         let updatedUser;
         const updateOptions = { 
