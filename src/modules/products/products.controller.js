@@ -84,7 +84,7 @@ export const getById = async (req, res, next) => {
 /**
  * Create new product
  * @route POST /products
- * @param {Object} req - Express request object (body: product data, user from auth)
+ * @param {Object} req - Express request object (body: product data, file: product image, user from auth)
  * @param {Object} res - Express response object
  * @param {Function} next - Next middleware
  * @returns {JSON} Created product
@@ -113,7 +113,7 @@ export const create = async (req, res, next) => {
 /**
  * Update existing product
  * @route PUT /products/:id
- * @param {Object} req - Express request object (params: id, body: update data)
+ * @param {Object} req - Express request object (params: id, body: update data, file: optional new product image)
  * @param {Object} res - Express response object
  * @param {Function} next - Next middleware
  * @returns {JSON} Updated product
