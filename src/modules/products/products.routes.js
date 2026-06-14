@@ -24,6 +24,7 @@ router.post(
   "/",
   authMiddleware,
   authorizeRole("vendor"),
+  uploadMiddleware,
   validateCreateProduct,
   productController.create,
 );
@@ -32,6 +33,7 @@ router.put(
   "/:id",
   authMiddleware,
   authorizeRole("vendor"),
+  uploadMiddleware,
   productController.update,
 );
 

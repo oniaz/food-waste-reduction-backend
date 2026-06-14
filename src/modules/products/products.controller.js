@@ -1,4 +1,5 @@
 import * as productService from "./products.service.js";
+import { uploadToCloudinary, deleteFromCloudinary } from "../../utils/authValidators.js";
 import mongoose from "mongoose";
 /**
  * Get all products
@@ -92,6 +93,12 @@ export const create = async (req, res, next) => {
   try {
     req.body.vendorId = req.user.id;
 
+    if (req.file) {
+      const uploadResult = await uploadToCloudinary(req.file.buffer);
+      req.body.imgUrl = uploadResult.secure_url;
+      req.body.publicImgId = uploadResult.public_id;
+    }
+
     const product = await productService.createProduct(req.body);
 
     res.status(201).json({
@@ -128,6 +135,17 @@ export const update = async (req, res, next) => {
         success: false,
         message: "You are not allowed to update this product",
       });
+    }
+
+      if (req.file) {
+      const uploadResult = await uploadToCloudinary(req.file.buffer);
+      
+      // Clean up the old image asset using the new utility
+      await deleteFromCloudinary(product.publicImgId);
+
+      req.body.imgUrl = uploadResult.secure_url;
+      req.body.publicImgId = uploadResult.public_id;
+
     }
 
     const updatedProduct = await productService.updateProduct(
@@ -170,6 +188,9 @@ export const remove = async (req, res, next) => {
         message: "You are not allowed to delete this product",
       });
     }
+
+    // Clean up asset from Cloudinary
+    await deleteFromCloudinary(product.publicImgId);
 
     await productService.deleteProduct(req.params.id);
 
