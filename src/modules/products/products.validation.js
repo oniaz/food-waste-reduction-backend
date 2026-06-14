@@ -1,4 +1,6 @@
 export const validateCreateProduct = (req, res, next) => {
+  req.body ??= {};
+
   // --- TYPE CONVERSION FOR MULTIPART FORM-DATA ---
   // Convert incoming text strings to their appropriate types before running checks
   if (req.body.price !== undefined) req.body.price = Number(req.body.price);
