@@ -1,4 +1,14 @@
 export const validateCreateProduct = (req, res, next) => {
+  req.body ??= {};
+
+  // --- TYPE CONVERSION FOR MULTIPART FORM-DATA ---
+  // Convert incoming text strings to their appropriate types before running checks
+  if (req.body.price !== undefined) req.body.price = Number(req.body.price);
+  if (req.body.quantity !== undefined) req.body.quantity = Number(req.body.quantity);
+  if (req.body.discount !== undefined) req.body.discount = Number(req.body.discount);
+  if (req.body.isDeliverable === "true") req.body.isDeliverable = true;
+  if (req.body.isDeliverable === "false") req.body.isDeliverable = false;
+
   const {
     productName,
     price,
@@ -6,7 +16,6 @@ export const validateCreateProduct = (req, res, next) => {
     quantity,
     category,
     discount,
-    imgUrl,
     isDeliverable,
   } = req.body;
 
@@ -18,14 +27,13 @@ export const validateCreateProduct = (req, res, next) => {
     snacks: 30,
   };
 
-  // 1. Required fields
+  // 1. Required fields (Removed imgUrl from here since it arrives as req.file)
   const requiredFields = [
     "productName",
     "price",
     "expiryDate",
     "quantity",
     "category",
-    "imgUrl",
     "isDeliverable",
   ];
 
@@ -36,6 +44,14 @@ export const validateCreateProduct = (req, res, next) => {
         message: `${field} is required`,
       });
     }
+  }
+
+  // File requirement check specifically for creating
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: "Product image file is required",
+    });
   }
 
   // 2. productName validation
@@ -95,7 +111,7 @@ export const validateCreateProduct = (req, res, next) => {
   }
 
   // 6. price validation
-  if (typeof price !== "number" || price <= 0) {
+  if (typeof price !== "number" || isNaN(price) || price <= 0) {
     return res.status(400).json({
       success: false,
       message: "Price must be a positive number",
@@ -111,29 +127,13 @@ export const validateCreateProduct = (req, res, next) => {
   }
 
   // 8. discount validation
-  if (discount !== undefined) {
+  if (discount !== undefined && !isNaN(discount)) {
     if (typeof discount !== "number" || discount < 0 || discount > price) {
       return res.status(400).json({
         success: false,
         message: "Discount must be between 0 and the product price",
       });
     }
-  }
-
-  // 9. imgUrl validation
-  if (typeof imgUrl !== "string" || imgUrl.trim() === "") {
-    return res.status(400).json({
-      success: false,
-      message: "Image URL must be a valid string",
-    });
-  }
-
-  const urlPattern = /^https?:\/\/.+/;
-  if (!urlPattern.test(imgUrl)) {
-    return res.status(400).json({
-      success: false,
-      message: "Image URL must be a valid URL",
-    });
   }
 
   // 10. isDeliverable validation

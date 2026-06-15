@@ -11,6 +11,7 @@ import * as productController from "./products.controller.js";
 import { validateCreateProduct } from "./products.validation.js";
 import authMiddleware from "../../middleware/authentication.middleware.js";
 import authorizeRole from "../../middleware/authorization.middleware.js";
+import {uploadMiddleware} from "../../middleware/upload.middleware.js";
 
 const router = express.Router();
 
@@ -24,6 +25,7 @@ router.post(
   "/",
   authMiddleware,
   authorizeRole("vendor"),
+  uploadMiddleware,
   validateCreateProduct,
   productController.create,
 );
@@ -32,6 +34,7 @@ router.put(
   "/:id",
   authMiddleware,
   authorizeRole("vendor"),
+  uploadMiddleware,
   productController.update,
 );
 
