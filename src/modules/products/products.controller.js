@@ -1,4 +1,5 @@
 import * as productService from "./products.service.js";
+import { uploadToCloudinary, deleteFromCloudinary } from "../../utils/cloudinaryHelper.js";
 import mongoose from "mongoose";
 /**
  * Get all products
@@ -83,7 +84,7 @@ export const getById = async (req, res, next) => {
 /**
  * Create new product
  * @route POST /products
- * @param {Object} req - Express request object (body: product data, user from auth)
+ * @param {Object} req - Express request object (body: product data, file: product image, user from auth)
  * @param {Object} res - Express response object
  * @param {Function} next - Next middleware
  * @returns {JSON} Created product
@@ -91,6 +92,12 @@ export const getById = async (req, res, next) => {
 export const create = async (req, res, next) => {
   try {
     req.body.vendorId = req.user.id;
+
+    if (req.file) {
+      const uploadResult = await uploadToCloudinary(req.file.buffer);
+      req.body.imgUrl = uploadResult.secure_url;
+      req.body.publicImgId = uploadResult.public_id;
+    }
 
     const product = await productService.createProduct(req.body);
 
@@ -106,7 +113,7 @@ export const create = async (req, res, next) => {
 /**
  * Update existing product
  * @route PUT /products/:id
- * @param {Object} req - Express request object (params: id, body: update data)
+ * @param {Object} req - Express request object (params: id, body: update data, file: optional new product image)
  * @param {Object} res - Express response object
  * @param {Function} next - Next middleware
  * @returns {JSON} Updated product
@@ -128,6 +135,17 @@ export const update = async (req, res, next) => {
         success: false,
         message: "You are not allowed to update this product",
       });
+    }
+
+      if (req.file) {
+      const uploadResult = await uploadToCloudinary(req.file.buffer);
+      
+      // Clean up the old image asset using the new utility
+      await deleteFromCloudinary(product.publicImgId);
+
+      req.body.imgUrl = uploadResult.secure_url;
+      req.body.publicImgId = uploadResult.public_id;
+
     }
 
     const updatedProduct = await productService.updateProduct(
@@ -170,6 +188,9 @@ export const remove = async (req, res, next) => {
         message: "You are not allowed to delete this product",
       });
     }
+
+    // Clean up asset from Cloudinary
+    await deleteFromCloudinary(product.publicImgId);
 
     await productService.deleteProduct(req.params.id);
 
