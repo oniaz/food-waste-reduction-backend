@@ -117,6 +117,63 @@ const SURPLUS_FOOD_TAGS = [
   "shelf-stable"
 ];
 
+/**
+ * RECOMMENDATIONS BASED ON CART ITEMS
+ */
+export const getCartRecommendations = async (cartItems) => {
+  if (!cartItems || cartItems.length === 0) return [];
+
+  // Simplify cart data to minimize tokens sent to the API
+  const cartSummary = cartItems.map(item => ({
+    name: item.productName,
+    category: item.category,
+    tags: item.tags || []
+  }));
+
+  const prompt = `
+    Based on this user's shopping cart items in a food waste reduction marketplace:
+    ${JSON.stringify(cartSummary)}
+
+    Identify the core food theme or categories they are purchasing. Recommend up to 2 categories or tags that would complement their current cart selection to help them find additional matching deals.
+    Respond ONLY with a valid JSON object matching this structure:
+    { "suggestedCategories": ["bakery"], "suggestedTags": ["snack time"] }
+  `;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const recommendations = JSON.parse(result.response.text().trim());
+
+    // Use MongoDB to fetch actual matching surplus products based on AI's keyword suggestions
+    return await Products.aggregate([
+      {
+        $match: {
+          quantity: { $gt: 0 }, // Ensure product is in stock
+          $or: [
+            { category: { $in: recommendations.suggestedCategories } },
+            { tags: { $in: recommendations.suggestedTags } }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          // Calculate a relevance score: 2 points for matching tags, 1 point for category
+          relevanceScore: {
+            $add: [
+              { $cond: [{ $setIsSubset: [["$category"], recommendations.suggestedCategories] }, 1, 0] },
+              { $cond: [{ $gt: [{ $size: { $setIntersection: ["$tags", recommendations.suggestedTags] } }, 0] }, 2, 0] }
+            ]
+          }
+        }
+      },
+      // Sort by the highest score first, so the absolute best matches appear on the UI
+      { $sort: { relevanceScore: -1, createdAt: -1 } },
+      { $limit: 4 }
+    ]);
+  } catch (error) {
+    console.error("AI Recommendation Error:", error);
+    return []; // Return nothing if the AI call fails
+  }
+};
 
 /**
  * AI Helper: Generates relevant tags for a product from the master list

@@ -202,3 +202,17 @@ export const remove = async (req, res, next) => {
     next(error);
   }
 };
+
+export const recommend = async (req, res, next) => {
+  try {
+    const { cartItems } = req.body; // Expecting an array from frontend
+    const suggestions = await productService.getCartRecommendations(cartItems);
+
+    res.status(200).json({
+      success: true,
+      data: suggestions,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

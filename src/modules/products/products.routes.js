@@ -45,4 +45,9 @@ router.delete(
   productController.remove,
 );
 
+router.post(
+  "/recommendations",
+  authMiddleware,
+  productController.recommend
+);
 export default router;
