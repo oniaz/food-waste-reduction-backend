@@ -3,7 +3,7 @@ import {
     validateUsername, validateEmail, validatePassword, validateRole,
     validatePhoneNumber, validateAddress, validateShopName, validateTaxNumber, validateName
 
-} from "../../utils/authValidators.js";
+} from "../../utils/userDataValidators.js";
 import { sendPasswordResetEmail } from "../auth/auth.services.js";
 import { registerUser } from "./auth.services.js";
 import Vendors from "../../models/vendors.model.js";
