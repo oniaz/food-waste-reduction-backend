@@ -1,6 +1,7 @@
+import { sendJsonResponse } from '../utils/response.js';
+
 export const notFoundMiddleware = (req, res) => {
-    res.status(404).json({
-        success: false,
+    sendJsonResponse(res, 404, {
         message: 'Route not found',
     });
 };
@@ -36,8 +37,7 @@ export const errorMiddleware = (err, req, res, next) => {
 
     console.error('Request error:', err);
 
-    res.status(statusCode).json({
-        success: false,
+    sendJsonResponse(res, statusCode, {
         message,
     });
 };

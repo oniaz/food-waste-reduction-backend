@@ -1,4 +1,5 @@
 import multer from "multer";
+import { sendJsonResponse } from '../utils/response.js';
 
 const storage = multer.memoryStorage();
 
@@ -31,25 +32,21 @@ export const uploadMiddleware = (req, res, next) => {
   uploadSingle(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === "LIMIT_FILE_SIZE") {
-        return res.status(400).json({
-          success: false,
+        return sendJsonResponse(res, 400, {
           message: "File size exceeds maximum limit of 5MB",
         });
       }
       if (err.code === "LIMIT_UNEXPECTED_FILE") {
-        return res.status(400).json({
-          success: false,
+        return sendJsonResponse(res, 400, {
           message: "Only one image file is allowed",
         });
       }
-      return res.status(400).json({
-        success: false,
+      return sendJsonResponse(res, 400, {
         message: err.message || "File upload error",
       });
     }
     if (err) {
-      return res.status(400).json({
-        success: false,
+      return sendJsonResponse(res, 400, {
         message: err.message,
       });
     }
