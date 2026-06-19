@@ -18,6 +18,7 @@ import {
   errorMiddleware,
 } from "./middleware/error.middleware.js";
 import { globalLimiter } from "./middleware/rateLimit.middleware.js";
+import { normalizeResponseBody } from "./utils/response.js";
 dotenv.config();
 
 const app = express();
@@ -35,6 +36,13 @@ app.use(
   }),
 );
 app.use(express.urlencoded({ extended: true }));
+app.use((req, res, next) => {
+  const originalJson = res.json.bind(res);
+
+  res.json = (body) => originalJson(normalizeResponseBody(res.statusCode, body));
+
+  next();
+});
 
 // 2. DB connection
 await connectDB();
