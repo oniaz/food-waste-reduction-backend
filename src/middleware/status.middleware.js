@@ -1,4 +1,4 @@
-import UsersAuth from "../auth/auth.model.js";
+import UsersAuth from "../models/usersAuth.model.js";
 
 const authorizeStatus = (...allowedStatuses) => {
     return async (req, res, next) => {
