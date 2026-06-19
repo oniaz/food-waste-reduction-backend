@@ -12,7 +12,7 @@ import { validateCreateProduct, validateRecommendCartItems } from "./products.va
 import authMiddleware from "../../middleware/authentication.middleware.js";
 import authorizeRole from "../../middleware/authorization.middleware.js";
 import {uploadMiddleware} from "../../middleware/upload.middleware.js";
-
+import { aiRecommendationLimiter,aiCreateLimiter } from "../../middleware/rateLimit.middleware.js";
 const router = express.Router();
 
 // Public
@@ -25,6 +25,7 @@ router.post(
   "/",
   authMiddleware,
   authorizeRole("vendor"),
+  aiCreateLimiter,
   uploadMiddleware,
   validateCreateProduct,
   productController.create,
@@ -48,6 +49,8 @@ router.delete(
 router.post(
   "/recommendations",
   authMiddleware,
+  authorizeRole("customer"),
+  aiRecommendationLimiter,
   validateRecommendCartItems,
   productController.recommend
 );
