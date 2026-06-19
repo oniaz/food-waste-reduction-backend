@@ -19,5 +19,22 @@ export const authLimiter = rateLimit({ //apply to login
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, 
 });
+/////
 
+export const aiCreateLimiter = rateLimit({ //apply to login
+    windowMs: 1 * 60 * 1000, // 1 min
+    max: 2, // Only 2 ai requests per minuit
+    keyGenerator: (req, res) => 'global-endpoint-bucket',
+    message: { message: "Too many login attempts. Try again later." },
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, 
+});
 
+export const aiRecommendationLimiter = rateLimit({ //apply to login
+    windowMs: 1 * 60 * 1000, // 1 min
+    max: 6, // Only 6 ai requests per minuit
+    keyGenerator: (req, res) => 'global-endpoint-bucket',
+    message: { message: "Too many login attempts. Try again later." },
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, 
+});
