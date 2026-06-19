@@ -204,6 +204,18 @@ export const remove = async (req, res, next) => {
   }
 };
 
+/**
+ * Recommend products based on current cart items
+ * @route POST /products/recommendations
+ * @param {Object} req - Express request object (body: cartItems array)
+ * @param {Array<Object>} req.body.cartItems - Array of cart items used to generate recommendations
+ * @param {string} req.body.cartItems[].category - Required non-empty category string for each cart item
+ * @param {string} req.body.cartItems[].productName - Required non-empty product name string for each cart item
+ * @param {Array<string>} [req.body.cartItems[].tags] - Optional non-empty tag strings for each cart item
+ * @param {Object} res - Express response object
+ * @param {Function} next - Next middleware
+ * @returns {JSON} Recommendation list or empty result message
+ */
 export const recommend = async (req, res, next) => {
   try {
     const { cartItems } = req.body; // Expecting an array from frontend
