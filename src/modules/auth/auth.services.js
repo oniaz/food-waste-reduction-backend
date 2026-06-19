@@ -50,12 +50,23 @@ const transporter = nodemailer.createTransport({
 });
 
 export const sendEmail = async ({ to, subject, html }) => {
-    await transporter.sendMail({
-        from: process.env.NODEMAILER_USERNAME,
-        to,
-        subject,
-        html,
-    });
+    try {
+        const info = await transporter.sendMail({
+            from: process.env.NODEMAILER_USERNAME,
+            to,
+            subject,
+            html,
+        });
+
+        if (info.rejected && info.rejected.length > 0) {
+            console.warn(`[Nodemailer] Email rejected for: ${info.rejected.join(', ')}`);
+        }
+
+        return { success: true, info };
+    } catch (error) {
+        console.error("[Nodemailer Error] Failed to send email:", error.message);
+        return { success: false, error: error.message };
+    }
 };
 
 export const sendPasswordResetEmail = async (email, name, resetLink) => {
