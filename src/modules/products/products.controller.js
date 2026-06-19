@@ -1,4 +1,5 @@
 import * as productService from "./products.service.js";
+import * as recommendationService from "./products.recommendation.service.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../../utils/cloudinaryHelper.js";
 import mongoose from "mongoose";
 /**
@@ -206,7 +207,7 @@ export const remove = async (req, res, next) => {
 export const recommend = async (req, res, next) => {
   try {
     const { cartItems } = req.body; // Expecting an array from frontend
-    const suggestions = await productService.getCartRecommendations(cartItems);
+    const suggestions = await recommendationService.getCartRecommendations(cartItems);
 
     if (suggestions.length === 0) {
       return res.status(200).json({
