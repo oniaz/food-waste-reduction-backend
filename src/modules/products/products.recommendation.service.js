@@ -1,10 +1,6 @@
 import Products from "../../models/products.model.js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { geminiModel } from "../../config/gemini.js";
 import { normalizeRecommendationPayload, parseModelJson } from "../../utils/modelJsonParser.js";
-
-const apiKey = process.env.GEMINI_API_KEY;
-const ai = new GoogleGenerativeAI(apiKey);
-const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 const buildCartSignals = (cartItems) => {
   const categories = new Set();
@@ -84,7 +80,7 @@ export const getCartRecommendations = async (cartItems) => {
   `;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await geminiModel.generateContent(prompt);
     const recommendations = normalizeRecommendationPayload(parseModelJson(result.response.text()));
 
     const aiMatches = await Products.aggregate([

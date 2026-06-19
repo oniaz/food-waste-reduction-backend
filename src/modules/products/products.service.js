@@ -1,14 +1,7 @@
-import dotenv from "dotenv";
-dotenv.config();
-
 import Products from "../../models/products.model.js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { geminiModel } from "../../config/gemini.js";
 import { SURPLUS_FOOD_TAGS } from "../../data/productTags.js";
 import { parseModelJson } from "../../utils/modelJsonParser.js";
-
-const apiKey = process.env.GEMINI_API_KEY;
-const ai = new GoogleGenerativeAI(apiKey);
-const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 /**
  * AI Helper: Generates relevant tags for a product from the master list
@@ -28,7 +21,7 @@ const generateProductTags = async (productName, description, category) => {
 `;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await geminiModel.generateContent(prompt);
     const cleanedResponse = result.response.text().trim();
 
     // Parse the response string back into a real JavaScript array
