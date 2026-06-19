@@ -240,11 +240,15 @@ export const forgotPassword = async (req, res, next) => {
 
         const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
 
-        await sendPasswordResetEmail(
+        const emailResult = await sendPasswordResetEmail(
             user.email,
             user.username,
             resetLink
         );
+
+        if (emailResult && !emailResult.success) {
+            console.error(`[Warning] Reset email failed to send to ${user.username} (${user.email})`);
+        }
 
         return res.status(200).json({
             message: "If the account exists, a reset link has been sent to the associated email."
