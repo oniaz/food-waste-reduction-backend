@@ -19,9 +19,7 @@ const authenticate = async (req, res, next) => {
 
         req.user = {
             authId: userAuth._id.toString(),
-            email: userAuth.email,
             role: userAuth.role,
-            accountStatus: userAuth.accountStatus
         };
 
         if (userAuth.role === 'vendor') {
