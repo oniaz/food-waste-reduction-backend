@@ -2,6 +2,7 @@ import express from "express";
 import { createOrder , getMyOrders , getOrderDetails , getSellerOrders, cancelOrder, updateOrderStatus , rateOrder} from "./orders.controller.js";
 import authenticate from "../../middleware/authentication.middleware.js" 
 import authorizeRole from "../../middleware/authorization.middleware.js"
+import authorizeStatus from "../../middleware/status.middleware.js";
 const router = express.Router();
 
 // POST /orders | Auth required (customer) | create order from cart items
@@ -27,7 +28,7 @@ const router = express.Router();
         //     next();
         // };
         
-router.post("/", authenticate, authorizeRole("customer"),createOrder);
+router.post("/", authenticate, authorizeRole("customer"), authorizeStatus("active"), createOrder);
 
 router.get("/my-orders", authenticate,authorizeRole("customer"), getMyOrders);
 
@@ -40,6 +41,6 @@ router.patch("/:id/cancel", authenticate, authorizeRole("customer"), cancelOrder
 
 router.patch("/:id/status", authenticate, authorizeRole('vendor', 'admin'), updateOrderStatus);
 
-router.post("/:id/rate",authenticate,authorizeRole("customer"), rateOrder);
+router.post("/:id/rate",authenticate,authorizeRole("customer"), authorizeStatus("active"), rateOrder);
 
 export default router;
