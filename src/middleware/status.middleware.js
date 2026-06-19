@@ -8,7 +8,7 @@ const authorizeStatus = (...allowedStatuses) => {
                 return res.status(500).json({ message: 'Internal server error' });
             }
 
-            const userId = req.user._id;
+            const userId = req.user.authId;
             const userAuth = await UsersAuth.findById(userId).select('accountStatus');
             
             if (!userAuth) {
