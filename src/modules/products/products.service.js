@@ -4,10 +4,70 @@ dotenv.config();
 import Products from "../../models/products.model.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { SURPLUS_FOOD_TAGS } from "../../data/productTags.js";
+import { normalizeRecommendationPayload, parseModelJson } from "../../utils/modelJsonParser.js";
 
 const apiKey = process.env.GEMINI_API_KEY;
 const ai = new GoogleGenerativeAI(apiKey);
 const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+const buildCartSignals = (cartItems) => {
+  const categories = new Set();
+  const tags = new Set();
+  const productNames = new Set();
+
+  for (const item of cartItems) {
+    if (typeof item?.category === "string") {
+      categories.add(item.category.trim().toLowerCase());
+    }
+
+    if (typeof item?.productName === "string") {
+      productNames.add(item.productName.trim().toLowerCase());
+    }
+
+    if (Array.isArray(item?.tags)) {
+      for (const tag of item.tags) {
+        if (typeof tag === "string" && tag.trim()) {
+          tags.add(tag.trim().toLowerCase());
+        }
+      }
+    }
+  }
+
+  return { categories, tags, productNames };
+};
+
+const getFallbackRecommendations = async (cartItems) => {
+  const { categories, tags, productNames } = buildCartSignals(cartItems);
+
+  const activeProducts = await Products.find({ quantity: { $gt: 0 } });
+
+  return activeProducts
+    .filter((product) => {
+      const productNameKey = product.productName?.trim().toLowerCase();
+      return !productNames.has(productNameKey);
+    })
+    .map((product) => {
+      const productCategory = product.category?.trim().toLowerCase();
+      const productTags = Array.isArray(product.tags)
+        ? product.tags.map((tag) => tag.trim().toLowerCase())
+        : [];
+
+      const categoryScore = categories.has(productCategory) ? 2 : 0;
+      const tagScore = productTags.reduce(
+        (score, tag) => (tags.has(tag) ? score + 1 : score),
+        0,
+      );
+
+      return {
+        product,
+        score: categoryScore + tagScore,
+      };
+    })
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 4)
+    .map(({ product }) => product);
+};
 
 /**
  * RECOMMENDATIONS BASED ON CART ITEMS
@@ -33,13 +93,12 @@ export const getCartRecommendations = async (cartItems) => {
 
   try {
     const result = await model.generateContent(prompt);
-    const recommendations = JSON.parse(result.response.text().trim());
+    const recommendations = normalizeRecommendationPayload(parseModelJson(result.response.text()));
 
-    // Use MongoDB to fetch actual matching surplus products based on AI's keyword suggestions
-    return await Products.aggregate([
+    const aiMatches = await Products.aggregate([
       {
         $match: {
-          quantity: { $gt: 0 }, // Ensure product is in stock
+          quantity: { $gt: 0 },
           $or: [
             { category: { $in: recommendations.suggestedCategories } },
             { tags: { $in: recommendations.suggestedTags } }
@@ -57,13 +116,18 @@ export const getCartRecommendations = async (cartItems) => {
           }
         }
       },
-      // Sort by the highest score first, so the absolute best matches appear on the UI
       { $sort: { relevanceScore: -1, createdAt: -1 } },
       { $limit: 4 }
     ]);
+
+    if (aiMatches.length > 0) {
+      return aiMatches;
+    }
+
+    return await getFallbackRecommendations(cartItems);
   } catch (error) {
     console.error("AI Recommendation Error:", error);
-    return []; // Return nothing if the AI call fails
+    return await getFallbackRecommendations(cartItems);
   }
 };
 
@@ -89,7 +153,7 @@ const generateProductTags = async (productName, description, category) => {
     const cleanedResponse = result.response.text().trim();
 
     // Parse the response string back into a real JavaScript array
-    return JSON.parse(cleanedResponse);
+    return parseModelJson(cleanedResponse);
   } catch (error) {
     console.error("AI Tagging Error (falling back to empty tags):", error);
     return []; // Fail safely! If the AI breaks or times out, return empty tags so the user's product is still created.

@@ -208,6 +208,13 @@ export const recommend = async (req, res, next) => {
     const { cartItems } = req.body; // Expecting an array from frontend
     const suggestions = await productService.getCartRecommendations(cartItems);
 
+    if (suggestions.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        message: "No recommendations available based on current cart items",
+      });
+    }
     res.status(200).json({
       success: true,
       data: suggestions,

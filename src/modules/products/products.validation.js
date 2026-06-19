@@ -156,3 +156,65 @@ export const validateCreateProduct = (req, res, next) => {
 
   next();
 };
+
+export const validateRecommendCartItems = (req, res, next) => {
+  req.body ??= {};
+
+  const { cartItems } = req.body;
+
+  if (!Array.isArray(cartItems)) {
+    return res.status(400).json({
+      success: false,
+      message: "cartItems must be an array",
+    });
+  }
+
+  if (cartItems.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: "cartItems cannot be empty",
+    });
+  }
+
+  for (const [index, item] of cartItems.entries()) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return res.status(400).json({
+        success: false,
+        message: `cartItems[${index}] must be an object`,
+      });
+    }
+
+    if (typeof item.category !== "string" || item.category.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: `cartItems[${index}].category is required and must be a non-empty string`,
+      });
+    }
+
+    if (typeof item.productName !== "string" || item.productName.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: `cartItems[${index}].productName is required and must be a non-empty string`,
+      });
+    }
+
+    if (item.tags !== undefined && !Array.isArray(item.tags)) {
+      return res.status(400).json({
+        success: false,
+        message: `cartItems[${index}].tags must be an array when provided`,
+      });
+    }
+
+    if (Array.isArray(item.tags)) {
+      const invalidTag = item.tags.find((tag) => typeof tag !== "string" || tag.trim() === "");
+      if (invalidTag !== undefined) {
+        return res.status(400).json({
+          success: false,
+          message: `cartItems[${index}].tags must contain only non-empty strings`,
+        });
+      }
+    }
+  }
+
+  next();
+};
