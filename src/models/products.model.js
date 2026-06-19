@@ -1,6 +1,15 @@
 import mongoose from "mongoose";
 const COMMISSION_FACTOR = 0.1;
-const categoriesEnum = ["bakery", "dairy", "snacks"];
+const categoriesEnum =  [
+  "dairy",
+  "meat_seafood",
+  "bakery",
+  "frozen_food",
+  "ready_meals",
+  "snacks_desserts",
+  "drinks",
+  "staples_essentials"
+];
 
 const productSchema = new mongoose.Schema(
   {
@@ -96,10 +105,16 @@ productSchema.pre("save", async function () {
 
   //Define subtraction rules per category
   const daysToSubtractBeforeExpiry = {
-    bakery: 7,
-    dairy: 10,
-    snacks: 30,
+  bakery: 7,
+  dairy: 10,
+  meat_seafood: 7,
+  frozen_food: 30,
+  ready_meals: 10,
+  snacks_desserts: 30,
+  drinks: 30,
+  staples_essentials: 30,
   };
+
 
   const bufferDays = daysToSubtractBeforeExpiry[this.category] || 0;
 
