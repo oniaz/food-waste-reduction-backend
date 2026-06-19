@@ -26,8 +26,8 @@ router.post(
   "/",
   authMiddleware,
   authorizeRole("vendor"),
-  aiCreateLimiter,
   authorizeStatus("active"),
+  aiCreateLimiter,
   uploadMiddleware,
   validateCreateProduct,
   productController.create,
@@ -54,9 +54,9 @@ router.post(
   "/recommendations",
   authMiddleware,
   authorizeRole("customer"),
+  authorizeStatus("active"),
   aiRecommendationLimiter,
   validateRecommendCartItems,
-  authorizeStatus("active"),
   productController.recommend
 );
 export default router;
