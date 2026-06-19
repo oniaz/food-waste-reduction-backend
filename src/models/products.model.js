@@ -8,7 +8,7 @@ const categoriesEnum =  [
   "ready_meals",
   "snacks_desserts",
   "drinks",
-  "staples_essentials"
+  "pantry"
 ];
 
 const productSchema = new mongoose.Schema(
@@ -112,7 +112,7 @@ productSchema.pre("save", async function () {
   ready_meals: 10,
   snacks_desserts: 30,
   drinks: 30,
-  staples_essentials: 30,
+  pantry: 30,
   };
 
 
