@@ -11,8 +11,8 @@ import * as productController from "./products.controller.js";
 import { validateCreateProduct, validateRecommendCartItems } from "./products.validation.js";
 import authMiddleware from "../../middleware/authentication.middleware.js";
 import authorizeRole from "../../middleware/authorization.middleware.js";
-import {uploadMiddleware} from "../../middleware/upload.middleware.js";
-
+import { uploadMiddleware } from "../../middleware/upload.middleware.js";
+import authorizeStatus from "../../middleware/status.middleware.js";
 const router = express.Router();
 
 // Public
@@ -25,6 +25,7 @@ router.post(
   "/",
   authMiddleware,
   authorizeRole("vendor"),
+  authorizeStatus("active"),
   uploadMiddleware,
   validateCreateProduct,
   productController.create,
@@ -34,6 +35,7 @@ router.put(
   "/:id",
   authMiddleware,
   authorizeRole("vendor"),
+  authorizeStatus("active"),
   uploadMiddleware,
   productController.update,
 );
@@ -42,6 +44,7 @@ router.delete(
   "/:id",
   authMiddleware,
   authorizeRole("vendor"),
+  authorizeStatus("active"),
   productController.remove,
 );
 
@@ -49,6 +52,7 @@ router.post(
   "/recommendations",
   authMiddleware,
   validateRecommendCartItems,
+  authorizeStatus("active"),
   productController.recommend
 );
 export default router;
