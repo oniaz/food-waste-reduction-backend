@@ -1,4 +1,37 @@
 import Products from "../../models/products.model.js";
+import { geminiModel } from "../../config/gemini.js";
+import { SURPLUS_FOOD_TAGS } from "../../data/productTags.js";
+import { parseModelJson } from "../../utils/modelJsonParser.js";
+
+/**
+ * AI Helper: Generates relevant tags for a product from the master list
+ */
+const generateProductTags = async (productName, description, category) => {
+  const prompt = `
+  You are an AI backend assistant for a surplus food marketplace minimizing food waste.
+  Analyze the following product data and select ALL tags from the ALLOWED TAGS list that genuinely and accurately apply to the product. Do not guess; only select a tag if it is highly relevant based on the product name, category, and description.
+  
+  Product Name: ${productName}
+  Description: ${description || "No description provided"}
+  Category: ${category}
+
+  ALLOWED TAGS: ${JSON.stringify(SURPLUS_FOOD_TAGS)}
+
+  CRITICAL: Respond ONLY with a valid JSON array of strings containing the selected tags (e.g., ["vegan", "snack time", "requires refrigeration"]). Do not include any markdown syntax, formatting, backticks, or text before/after the array.
+`;
+
+  try {
+    const result = await geminiModel.generateContent(prompt);
+    const cleanedResponse = result.response.text().trim();
+
+    // Parse the response string back into a real JavaScript array
+    return parseModelJson(cleanedResponse);
+  } catch (error) {
+    console.error("AI Tagging Error (falling back to empty tags):", error);
+    return []; // Fail safely! If the AI breaks or times out, return empty tags so the user's product is still created.
+  }
+};
+
 /**
  * GET ALL PRODUCTS
  */
@@ -56,6 +89,11 @@ export const getProductById = async (id) => {
  * CREATE
  */
 export const createProduct = async (data) => {
+  // Generate tags using AI if not provided
+  if (!data.tags || data.tags.length === 0) {
+    const generatedTags = await generateProductTags(data.productName, data.description, data.category);
+    data.tags = generatedTags;
+  }
   return await Products.create(data);
 };
 
