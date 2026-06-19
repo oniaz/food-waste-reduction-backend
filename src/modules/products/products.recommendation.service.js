@@ -6,8 +6,13 @@ const buildCartSignals = (cartItems) => {
   const categories = new Set();
   const tags = new Set();
   const productNames = new Set();
+  const cartIds = new Set(); // Store item IDs to ensure exclusion
 
   for (const item of cartItems) {
+    if (item?._id) {
+      cartIds.add(item._id.toString());
+    }
+
     if (typeof item?.category === "string") {
       categories.add(item.category.trim().toLowerCase());
     }
@@ -25,18 +30,20 @@ const buildCartSignals = (cartItems) => {
     }
   }
 
-  return { categories, tags, productNames };
+  return { categories, tags, productNames, cartIds };
 };
 
 const getFallbackRecommendations = async (cartItems) => {
-  const { categories, tags, productNames } = buildCartSignals(cartItems);
+  const { categories, tags, productNames, cartIds } = buildCartSignals(cartItems);
 
   const activeProducts = await Products.find({ quantity: { $gt: 0 } });
 
   return activeProducts
     .filter((product) => {
+      // Exclude by unique database ID or matching product name string safely
+      const productIdStr = product._id?.toString();
       const productNameKey = product.productName?.trim().toLowerCase();
-      return !productNames.has(productNameKey);
+      return !cartIds.has(productIdStr) && !productNames.has(productNameKey);
     })
     .map((product) => {
       const productCategory = product.category?.trim().toLowerCase();
@@ -64,6 +71,9 @@ const getFallbackRecommendations = async (cartItems) => {
 export const getCartRecommendations = async (cartItems) => {
   if (!cartItems || cartItems.length === 0) return [];
 
+  // Extract cart IDs to exclude them cleanly from the main database query
+  const cartProductIds = cartItems.map(item => item._id).filter(Boolean);
+
   const cartSummary = cartItems.map((item) => ({
     name: item.productName,
     category: item.category,
@@ -87,6 +97,7 @@ export const getCartRecommendations = async (cartItems) => {
       {
         $match: {
           quantity: { $gt: 0 },
+          _id: { $nin: cartProductIds }, // Explicitly filter out what's already in the cart
           $or: [
             { category: { $in: recommendations.suggestedCategories } },
             { tags: { $in: recommendations.suggestedTags } },
