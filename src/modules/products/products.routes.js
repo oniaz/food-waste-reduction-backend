@@ -8,7 +8,7 @@
 
 import express from "express";
 import * as productController from "./products.controller.js";
-import { validateCreateProduct } from "./products.validation.js";
+import { validateCreateProduct, validateRecommendCartItems } from "./products.validation.js";
 import authMiddleware from "../../middleware/authentication.middleware.js";
 import authorizeRole from "../../middleware/authorization.middleware.js";
 import {uploadMiddleware} from "../../middleware/upload.middleware.js";
@@ -45,4 +45,10 @@ router.delete(
   productController.remove,
 );
 
+router.post(
+  "/recommendations",
+  authMiddleware,
+  validateRecommendCartItems,
+  productController.recommend
+);
 export default router;
