@@ -17,7 +17,7 @@ import {
   notFoundMiddleware,
   errorMiddleware,
 } from "./middleware/error.middleware.js";
-
+import { globalLimiter } from "./middleware/rateLimit.middleware.js";
 dotenv.config();
 
 const app = express();
@@ -43,8 +43,9 @@ await connectDB();
 app.get("/", (req, res) => {
   res.json({ message: "Welcome to the Waste Reduction API!" });
 });
-
-// 4. Routes
+// 4. Rate limit
+app.use(globalLimiter)
+// 5. Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/orders", ordersRoutes);
