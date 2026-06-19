@@ -110,13 +110,20 @@ export const getMyOrders = async (req, res, next) => {  //mock auth was used for
         if (!customerId) {
             return res.status(401).json({ message: "Unauthorized: Customer ID not found" });
         }
-        const limit = parseInt(req.query.limit, 10) || 10;
-        const orders = await Order.find({ customerId }).sort({ createdAt: -1 }).limit(limit);
+
+        const page = parseInt(req.query.page, 10) || 1;   
+        const limit = parseInt(req.query.limit, 10) || 10; 
+        const skip = (page - 1) * limit;
+        const totalOrders= await Order.countDocuments({ customerId });
+        const orders = await Order.find({ customerId }).sort({ createdAt: -1 }).skip(skip).limit(limit);
 
         return res.status(200).json({ 
             success: true, 
             count: orders.length, 
-            orders 
+            totalOrders,
+            totalPages: Math.ceil(totalOrders / limit),
+            currentPage: page,
+            orders
         });
 
     } catch (error) {
@@ -248,22 +255,29 @@ export const getSellerOrders = async (req, res, next) => {
             return res.status(401).json({ message: "Unauthorized: Seller ID not found" });
         }
 
-        const limit = parseInt(req.query.limit, 10) || 10;
+        const page = parseInt(req.query.page, 10) || 1;   // Default to page 1
+        const limit = parseInt(req.query.limit, 10) || 10; // Default to 10 items per page
+        const skip = (page - 1) * limit;
+
         const sellerProductIds = await Product.distinct('_id', { vendorId: sellerId }); // Get array of all product IDs that belong to this seller , distinct is used to optimize the query by only returning unique product IDs instead of full product documents
 
         if (sellerProductIds.length === 0) { //if no products, then no orders can contain seller products
-            return res.status(200).json({ 
+                return res.status(200).json({ 
                 success: true, 
                 count: 0, 
+                totalPages: 0,
+                currentPage: page,
                 orders: [] 
             });
         }
 
         //Find orders containing any of those product IDs using $in operator
+        const totalOrders = await Order.countDocuments({ "products.productId": { $in: sellerProductIds } });
         const orders = await Order.find({ 
             "products.productId": { $in: sellerProductIds } 
         })
         .sort({ createdAt: -1 })
+        .skip(skip)
         .limit(limit)
         .populate({
             path: 'customerId',
@@ -277,7 +291,10 @@ export const getSellerOrders = async (req, res, next) => {
         return res.status(200).json({ 
             success: true, 
             count: orders.length, 
-            orders 
+            totalOrders,                                 // Total matching records
+            totalPages: Math.ceil(totalOrders / limit),  // Total pages available
+            currentPage: page,                           // Current page number
+            orders
         });
 
     } catch (error) {
