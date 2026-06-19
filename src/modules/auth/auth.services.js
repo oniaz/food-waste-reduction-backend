@@ -16,12 +16,11 @@ export async function registerUser({ username, password, role, email, profileDat
             if (existingCustomer) throw { status: 400, message: "Customer account already exists with this email. Only one customer account per email is allowed." };
         }
 
-        // commented out until admin approval flow is implemented
-        // const accountStatus = role === "vendor" ? "pending" : "active";
+        const accountStatus = role === "vendor" ? "pending" : "active";
         const [newAuth] = await UsersAuth.create(
-            [{ username, password, role, email,
-                //  accountStatus
-                 }],
+            [{
+                username, password, role, email, accountStatus
+            }],
             { session }
         );
 
