@@ -1,3 +1,7 @@
+// src/modules/products/products.validation.js
+// Path goes up two levels (out of products, out of modules) then into data
+import { categoriesEnum, daysToSubtractBeforeExpiry } from "../../data/productCategories.js";
+
 export const validateCreateProduct = (req, res, next) => {
   req.body ??= {};
 
@@ -18,14 +22,6 @@ export const validateCreateProduct = (req, res, next) => {
     discount,
     isDeliverable,
   } = req.body;
-
-  const categoriesEnum = ["bakery", "dairy", "snacks"];
-
-  const daysToSubtractBeforeExpiry = {
-    bakery: 7,
-    dairy: 10,
-    snacks: 30,
-  };
 
   // 1. Required fields (Removed imgUrl from here since it arrives as req.file)
   const requiredFields = [
@@ -78,7 +74,7 @@ export const validateCreateProduct = (req, res, next) => {
     });
   }
 
-  // 3. category validation
+  // 3. Validates category against the array imported from data/
   if (typeof category !== "string" || !categoriesEnum.includes(category)) {
     return res.status(400).json({
       success: false,
