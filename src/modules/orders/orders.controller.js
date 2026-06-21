@@ -110,12 +110,27 @@ export const getMyOrders = async (req, res, next) => {  //mock auth was used for
         if (!customerId) {
             return res.status(401).json({ message: "Unauthorized: Customer ID not found" });
         }
-
+        // 1. Start with your working baseline filter
+        const queryFilter = { customerId };
+        
+        // // 2. Strict validation check for the status string
+        const incomingStatus = req.query.status;
+        
+        if (
+            incomingStatus && 
+            typeof incomingStatus === 'string' && 
+            incomingStatus.trim() !== '' && 
+            incomingStatus !== 'undefined' && // Guardrail against frontend string serialization bugs
+            incomingStatus !== 'all'          // Guardrail if frontend uses 'all' for resetting filters
+        ) {
+            queryFilter.status = incomingStatus.trim().toLowerCase();
+        }
+        
         const page = parseInt(req.query.page, 10) || 1;   
         const limit = parseInt(req.query.limit, 10) || 10; 
         const skip = (page - 1) * limit;
-        const totalOrders= await Order.countDocuments({ customerId });
-        const rawOrders = await Order.find({ customerId })
+        const totalOrders= await Order.countDocuments(queryFilter);
+        const rawOrders = await Order.find( queryFilter )
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
