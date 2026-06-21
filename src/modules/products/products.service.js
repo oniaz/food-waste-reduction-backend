@@ -1,4 +1,5 @@
 import Products from "../../models/products.model.js";
+import UsersAuth from "../../models/usersAuth.model.js";
 import { geminiModel } from "../../config/gemini.js";
 import { SURPLUS_FOOD_TAGS } from "../../data/productTags.js";
 import { parseModelJson } from "../../utils/modelJsonParser.js";
@@ -37,22 +38,22 @@ const generateProductTags = async (productName, description, category) => {
  */
 export const getAllProducts = async (filters) => {
   const today = new Date();
-  const query = {
+  const matchStage = {
     validDate: { $gte: today },
     expiryDate: { $gt: today },
     quantity: { $gt: 0 },
   };
 
-  if (filters?.category) query.category = filters.category;
+  if (filters?.category) matchStage.category = filters.category;
 
   if (filters?.minPrice || filters?.maxPrice) {
-    query.price = {};
-    if (filters.minPrice) query.price.$gte = Number(filters.minPrice);
-    if (filters.maxPrice) query.price.$lte = Number(filters.maxPrice);
+    matchStage.price = {};
+    if (filters.minPrice) matchStage.price.$gte = Number(filters.minPrice);
+    if (filters.maxPrice) matchStage.price.$lte = Number(filters.maxPrice);
   }
 
   if (filters?.q) {
-    query.$or = [
+    matchStage.$or = [
       { productName: { $regex: filters.q, $options: "i" } },
       { tags: { $in: [new RegExp(filters.q, "i")] } },
     ];
@@ -62,12 +63,41 @@ export const getAllProducts = async (filters) => {
   const limit = Number(filters?.limit) || 10;
   const skip = (page - 1) * limit;
 
-  const products = await Products.find(query)
-    .sort({ expiryDate: 1 })
-    .skip(skip)
-    .limit(limit);
+  const pipeline = [
+    { $match: matchStage },
+    {
+      $lookup: {
+        from: "vendors",
+        localField: "vendorId",
+        foreignField: "_id",
+        as: "vendor",
+      },
+    },
+    { $unwind: "$vendor" },
+    {
+      $lookup: {
+        from: UsersAuth.collection.name,
+        localField: "vendor.authId",
+        foreignField: "_id",
+        as: "vendorAuth",
+      },
+    },
+    { $unwind: "$vendorAuth" },
+    { $match: { "vendorAuth.accountStatus": "active" } },
+    { $project: { vendor: 0, vendorAuth: 0 } },
+    { $sort: { expiryDate: 1 } },
+    {
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: [{ $skip: skip }, { $limit: limit }],
+      },
+    },
+  ];
 
-  const total = await Products.countDocuments(query);
+  const result = await Products.aggregate(pipeline);
+
+  const total = result[0]?.metadata[0]?.total || 0;
+  const products = result[0]?.data || [];
 
   return {
     page,

@@ -148,7 +148,7 @@ export const login = async (req, res, next) => {
         }
 
         const jwtToken = jwt.sign(
-            { sub: user._id, role: user.role, accountStatus: user.accountStatus },
+            { sub: user._id, role: user.role },
             process.env.JWT_SECRET,
             { expiresIn: "7d" }
         );
@@ -238,13 +238,20 @@ export const forgotPassword = async (req, res, next) => {
             { expiresIn: "15m" }
         );
 
+        user.resetToken = token;
+        await user.save();
+
         const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
 
-        await sendPasswordResetEmail(
+        const emailResult = await sendPasswordResetEmail(
             user.email,
             user.username,
             resetLink
         );
+
+        if (emailResult && !emailResult.success) {
+            console.error(`[Warning] Reset email failed to send to ${user.username} (${user.email})`);
+        }
 
         return res.status(200).json({
             message: "If the account exists, a reset link has been sent to the associated email."
@@ -300,7 +307,12 @@ export const resetPassword = async (req, res, next) => {
             });
         }
 
+        if (user.resetToken !== token) {
+            return res.status(400).json({ message: "Link is invalid or has expired" });
+        }
+
         user.password = newPassword;
+        user.resetToken = null;
         await user.save();
 
         return res.status(200).json({

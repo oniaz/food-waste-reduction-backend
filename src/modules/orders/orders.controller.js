@@ -110,12 +110,60 @@ export const getMyOrders = async (req, res, next) => {  //mock auth was used for
         if (!customerId) {
             return res.status(401).json({ message: "Unauthorized: Customer ID not found" });
         }
-        const limit = parseInt(req.query.limit, 10) || 10;
-        const orders = await Order.find({ customerId }).sort({ createdAt: -1 }).limit(limit);
+
+        const page = parseInt(req.query.page, 10) || 1;   
+        const limit = parseInt(req.query.limit, 10) || 10; 
+        const skip = (page - 1) * limit;
+        const totalOrders= await Order.countDocuments({ customerId });
+        const rawOrders = await Order.find({ customerId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate({
+                path: 'products.productId',
+                select: 'price discount commission' // Pulls base price, commision and discount from Product schema
+            })
+            .populate({
+                path: 'products.vendorId', // Targets vendorId inside the products array
+                select: 'shopName' // Pulls shopName from Vendors schema
+            });
+        // 2. Map through orders to calculate summary pricing totals
+        const orders = rawOrders.map(orderDoc => {
+            // Convert Mongoose Document to raw JS object so we can append custom properties safely
+            const order = orderDoc.toObject(); 
+            
+            let totalPriceBeforeDiscount = 0;
+            let totalDiscount = 0;
+
+            order.products.forEach(item => {
+                const quantity = item.quantity || 0;
+                // Fallback to schema values if product document populated successfully
+                const basePrice = (item.productId?.price || item.priceAtPurchase)+(item.productId?.commission); 
+                const itemDiscount = item.productId?.discount || 0; 
+
+                totalPriceBeforeDiscount += basePrice * quantity;
+                totalDiscount += itemDiscount * quantity;
+            });
+
+            const finalPrice = totalPriceBeforeDiscount - totalDiscount;
+
+            // Attach computed values back to the order object root level
+            return {
+                ...order,
+                summary: {
+                    totalPriceBeforeDiscount,
+                    totalDiscount,
+                    finalPrice: finalPrice < 0 ? 0 : finalPrice // Ensure it doesn't drop below zero
+                }
+            };
+        });
 
         return res.status(200).json({ 
             success: true, 
             count: orders.length, 
+            totalOrders,
+            totalPages: Math.ceil(totalOrders / limit),
+            currentPage: page,
             orders 
         });
 
@@ -152,63 +200,84 @@ export const getMyOrders = async (req, res, next) => {  //mock auth was used for
  */
 export const getOrderDetails = async (req, res, next) => {
     try {
-        // Implementation logic to get order details by ID 
-            const orderId = req.params.id;
-            if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
-                return res.status(400).json({ message: "Invalid order ID" });
-            }
-            const order = await Order.findById(orderId).populate({
+        const orderId = req.params.id;
+        if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+            return res.status(400).json({ message: "Invalid order ID" });
+        }
+
+        const orderDoc = await Order.findById(orderId)
+            .populate({
                 path: 'customerId',
-                select: 'name phoneNumber' //only name and email of customer are needed in order details response
-            }).populate({
+                select: 'name phoneNumber' 
+            })
+            .populate({
                 path: 'products.productId', 
+                select: 'price discount commission',
                 populate: {
-                    path: 'vendorId', //populate the vendor details of each product in the order
-                    select: 'shopName phoneNumber detailedAddress' //only shop name and email of vendor are needed in order details response
+                    path: 'vendorId', 
+                    select: 'shopName phoneNumber detailedAddress' 
                 }
             });
-            if (!order) {
-                return res.status(404).json({ message: "Order not found" });
-            }
 
-            // --- MULTI-ROLE SECURITY GUARDRAIL (FIXED) ---
-            const currentUserId = req.user?.id;
-            const currentUserRole = req.user?.role;
+        if (!orderDoc) {
+            return res.status(404).json({ message: "Order not found" });
+        }
 
-            // 1. Check if the user is an Admin
-            const isAdmin = currentUserRole === 'admin';
+        // --- MULTI-ROLE SECURITY GUARDRAIL ---
+        const currentUserId = req.user?.id;
+        const currentUserRole = req.user?.role;
 
-            // 2. Check if the user is the Customer who bought it (Safe string conversion)
-            const orderCustomerStrId = order.customerId?._id ? order.customerId._id.toString() : order.customerId?.toString();
-            const isCustomerOwner = currentUserRole === 'customer' && orderCustomerStrId === currentUserId;
+        const isAdmin = currentUserRole === 'admin';
+        const orderCustomerStrId = orderDoc.customerId?._id ? orderDoc.customerId._id.toString() : orderDoc.customerId?.toString();
+        const isCustomerOwner = currentUserRole === 'customer' && orderCustomerStrId === currentUserId;
 
-            // 3. Check if the user is an involved Vendor
-            const isSellerInvolved = currentUserRole === 'vendor' && order.products.some(item => { 
-                const vendorRef = item.productId?.vendorId;
-                
-                if (!vendorRef) return false; // Skip if product has no vendor assignment safely
+        const isSellerInvolved = currentUserRole === 'vendor' && orderDoc.products.some(item => { 
+            const vendorRef = item.productId?.vendorId;
+            if (!vendorRef) return false; 
 
-                // If deeply populated, grab ._id. If unpopulated, grab the raw ID value
-                const vendorStrId = (typeof vendorRef === 'object' && '_id' in vendorRef) 
-                    ? vendorRef._id.toString() 
-                    : vendorRef.toString();
+            const vendorStrId = (typeof vendorRef === 'object' && '_id' in vendorRef) 
+                ? vendorRef._id.toString() 
+                : vendorRef.toString();
 
-                return vendorStrId === currentUserId;
+            return vendorStrId === currentUserId;
+        });
+
+        if (!isAdmin && !isCustomerOwner && !isSellerInvolved) {
+            return res.status(403).json({ 
+                success: false,
+                message: "Forbidden: You do not have permission to view this order" 
             });
+        }
+        // Convert the single document safely into a plain object
+        const order = orderDoc.toObject(); 
+        
+        let totalPriceBeforeDiscount = 0;
+        let totalDiscount = 0;
 
-            // If the current user is NOT an admin, NOT the buyer, and NOT an involved seller... block them!
-            if (!isAdmin && !isCustomerOwner && !isSellerInvolved) {
-                return res.status(403).json({ 
-                    success: false,
-                    message: "Forbidden: You do not have permission to view this order" 
-                });
-            }
+        order.products.forEach(item => {
+            const quantity = item.quantity || 0;
+            const commission = item.productId?.commission || 0;
+            const basePrice = (item.productId?.price || item.priceAtPurchase) + commission; 
+            const itemDiscount = item.productId?.discount || 0; 
 
-            // Security passed! Send response
-            return res.status(200).json({
-                success: true,
-                order
-    });
+            totalPriceBeforeDiscount += basePrice * quantity;
+            totalDiscount += itemDiscount * quantity;
+        });
+
+        const finalPrice = totalPriceBeforeDiscount - totalDiscount;
+
+        // Directly attach the summary object onto the single order root
+        order.summary = {
+            totalPriceBeforeDiscount,
+            totalDiscount,
+            finalPrice: finalPrice < 0 ? 0 : finalPrice 
+        };
+
+        // Send the modified plain object response
+        return res.status(200).json({
+            success: true,
+            order
+        });
 
     } catch (error) {
         next(error);
@@ -248,22 +317,29 @@ export const getSellerOrders = async (req, res, next) => {
             return res.status(401).json({ message: "Unauthorized: Seller ID not found" });
         }
 
-        const limit = parseInt(req.query.limit, 10) || 10;
+        const page = parseInt(req.query.page, 10) || 1;   // Default to page 1
+        const limit = parseInt(req.query.limit, 10) || 10; // Default to 10 items per page
+        const skip = (page - 1) * limit;
+
         const sellerProductIds = await Product.distinct('_id', { vendorId: sellerId }); // Get array of all product IDs that belong to this seller , distinct is used to optimize the query by only returning unique product IDs instead of full product documents
 
         if (sellerProductIds.length === 0) { //if no products, then no orders can contain seller products
-            return res.status(200).json({ 
+                return res.status(200).json({ 
                 success: true, 
                 count: 0, 
+                totalPages: 0,
+                currentPage: page,
                 orders: [] 
             });
         }
 
         //Find orders containing any of those product IDs using $in operator
+        const totalOrders = await Order.countDocuments({ "products.productId": { $in: sellerProductIds } });
         const orders = await Order.find({ 
             "products.productId": { $in: sellerProductIds } 
         })
         .sort({ createdAt: -1 })
+        .skip(skip)
         .limit(limit)
         .populate({
             path: 'customerId',
@@ -277,7 +353,10 @@ export const getSellerOrders = async (req, res, next) => {
         return res.status(200).json({ 
             success: true, 
             count: orders.length, 
-            orders 
+            totalOrders,                                 // Total matching records
+            totalPages: Math.ceil(totalOrders / limit),  // Total pages available
+            currentPage: page,                           // Current page number
+            orders
         });
 
     } catch (error) {
