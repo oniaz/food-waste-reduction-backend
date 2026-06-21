@@ -1,6 +1,7 @@
 import * as productService from "./products.service.js";
 import * as recommendationService from "./products.recommendation.service.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../../utils/cloudinaryHelper.js";
+import { CATEGORY_CONFIG } from "../../data/productCategories.js";
 import mongoose from "mongoose";
 /**
  * Get all products
@@ -230,6 +231,17 @@ export const recommend = async (req, res, next) => {
     res.status(200).json({
       success: true,
       data: suggestions,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCategories = async (req, res, next) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      data: CATEGORY_CONFIG,
     });
   } catch (error) {
     next(error);
