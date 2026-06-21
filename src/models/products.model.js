@@ -1,15 +1,7 @@
 import mongoose from "mongoose";
+import { categoriesEnum, daysToSubtractBeforeExpiry } from "../data/productCategories.js";
+
 const COMMISSION_FACTOR = 0.1;
-const categoriesEnum =  [
-  "dairy",
-  "meat_seafood",
-  "bakery",
-  "frozen_food",
-  "ready_meals",
-  "snacks_desserts",
-  "drinks",
-  "pantry"
-];
 
 const productSchema = new mongoose.Schema(
   {
@@ -101,20 +93,7 @@ productSchema.pre("save", async function () {
     return; // Safe to skip only if nothing relevant changed and validDate already exists
   }
 
-  if (!this.expiryDate) return; // If expiryDate is not set, we can't calculate validDate, so we skip the calculation
-
-  //Define subtraction rules per category
-  const daysToSubtractBeforeExpiry = {
-  bakery: 7,
-  dairy: 10,
-  meat_seafood: 7,
-  frozen_food: 30,
-  ready_meals: 10,
-  snacks_desserts: 30,
-  drinks: 30,
-  pantry: 30,
-  };
-
+  if (!this.expiryDate) return;
 
   const bufferDays = daysToSubtractBeforeExpiry[this.category] || 0;
 

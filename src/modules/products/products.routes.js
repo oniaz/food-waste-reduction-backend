@@ -19,6 +19,7 @@ const router = express.Router();
 // Public
 router.get("/search", productController.search);
 router.get("/", productController.getAll);
+router.get("/categories", productController.getCategories);
 router.get("/:id", productController.getById);
 
 // Protected
