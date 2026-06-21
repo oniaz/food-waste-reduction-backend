@@ -1,5 +1,6 @@
 import Products from "../../models/products.model.js";
 import Customers from "../../models/customers.model.js";
+import Vendors from "../../models/vendors.model.js";
 import { geminiModel } from "../../config/gemini.js";
 import { normalizeRecommendationPayload, parseModelJson } from "../../utils/modelJsonParser.js";
 
@@ -39,18 +40,26 @@ const getFallbackRecommendations = async (cartItems, customerAddress = null) => 
   const customerCity = customerAddress?.city || "";
   const customerGov = customerAddress?.governorate || "";
 
+  // Pre-resolve vendor IDs by location so the Products.find $or is valid
+  let locationVendorIds = [];
+  if (customerAddress) {
+    const locationVendors = await Vendors.find({
+      $or: [
+        { "address.neighborhood": customerNeighbourhood },
+        { "address.city": customerCity },
+        { "address.governorate": customerGov },
+      ]
+    }).select("_id").lean();
+    locationVendorIds = locationVendors.map(v => v._id);
+  }
+
   const activeProducts = await Products.find({
     quantity: { $gt: 0 },
     _id: { $nin: Array.from(cartIds) },
     $or: [
       { category: { $in: Array.from(categories) } },
       { tags: { $in: Array.from(tags) } },
-      { vendorId: { $in: Array.from(vendorIds) } },
-      ...(customerAddress ? [
-        { "vendorId.address.neighborhood": customerNeighbourhood },
-        { "vendorId.address.city": customerCity },
-        { "vendorId.address.governorate": customerGov }
-      ] : [])
+      { vendorId: { $in: [...Array.from(vendorIds), ...locationVendorIds] } },
     ]
   }).populate("vendorId");
 
