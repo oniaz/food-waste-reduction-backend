@@ -30,6 +30,10 @@ const usersAuthSchema = new mongoose.Schema({
         required: true,
         enum: ["active", "pending", "suspended"],
         default: "active"
+    },
+    resetToken: {
+        type: String,
+        default: null
     }}, { timestamps: true });
 usersAuthSchema.pre("save", async function() {
     if (!this.isModified("password")) return;
