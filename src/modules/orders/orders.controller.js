@@ -115,7 +115,48 @@ export const getMyOrders = async (req, res, next) => {  //mock auth was used for
         const limit = parseInt(req.query.limit, 10) || 10; 
         const skip = (page - 1) * limit;
         const totalOrders= await Order.countDocuments({ customerId });
-        const orders = await Order.find({ customerId }).sort({ createdAt: -1 }).skip(skip).limit(limit);
+        const rawOrders = await Order.find({ customerId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate({
+                path: 'products.productId',
+                select: 'price discount commission' // Pulls base price, commision and discount from Product schema
+            })
+            .populate({
+                path: 'products.vendorId', // Targets vendorId inside the products array
+                select: 'shopName' // Pulls shopName from Vendors schema
+            });
+        // 2. Map through orders to calculate summary pricing totals
+        const orders = rawOrders.map(orderDoc => {
+            // Convert Mongoose Document to raw JS object so we can append custom properties safely
+            const order = orderDoc.toObject(); 
+            
+            let totalPriceBeforeDiscount = 0;
+            let totalDiscount = 0;
+
+            order.products.forEach(item => {
+                const quantity = item.quantity || 0;
+                // Fallback to schema values if product document populated successfully
+                const basePrice = (item.productId?.price || item.priceAtPurchase)+(item.productId?.commission); 
+                const itemDiscount = item.productId?.discount || 0; 
+
+                totalPriceBeforeDiscount += basePrice * quantity;
+                totalDiscount += itemDiscount * quantity;
+            });
+
+            const finalPrice = totalPriceBeforeDiscount - totalDiscount;
+
+            // Attach computed values back to the order object root level
+            return {
+                ...order,
+                summary: {
+                    totalPriceBeforeDiscount,
+                    totalDiscount,
+                    finalPrice: finalPrice < 0 ? 0 : finalPrice // Ensure it doesn't drop below zero
+                }
+            };
+        });
 
         return res.status(200).json({ 
             success: true, 
@@ -123,7 +164,7 @@ export const getMyOrders = async (req, res, next) => {  //mock auth was used for
             totalOrders,
             totalPages: Math.ceil(totalOrders / limit),
             currentPage: page,
-            orders
+            orders 
         });
 
     } catch (error) {
@@ -168,7 +209,7 @@ export const getOrderDetails = async (req, res, next) => {
                 path: 'customerId',
                 select: 'name phoneNumber' //only name and email of customer are needed in order details response
             }).populate({
-                path: 'products.productId', 
+                path: 'products.productId', //add prices
                 populate: {
                     path: 'vendorId', //populate the vendor details of each product in the order
                     select: 'shopName phoneNumber detailedAddress' //only shop name and email of vendor are needed in order details response
