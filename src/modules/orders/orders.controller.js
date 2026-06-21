@@ -200,64 +200,84 @@ export const getMyOrders = async (req, res, next) => {  //mock auth was used for
  */
 export const getOrderDetails = async (req, res, next) => {
     try {
-        // Implementation logic to get order details by ID 
-            const orderId = req.params.id;
-            if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
-                return res.status(400).json({ message: "Invalid order ID" });
-            }
-            const order = await Order.findById(orderId).populate({
+        const orderId = req.params.id;
+        if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+            return res.status(400).json({ message: "Invalid order ID" });
+        }
+
+        const orderDoc = await Order.findById(orderId)
+            .populate({
                 path: 'customerId',
-                select: 'name phoneNumber' //only name and email of customer are needed in order details response
-            }).populate({
+                select: 'name phoneNumber' 
+            })
+            .populate({
                 path: 'products.productId', 
                 select: 'price discount commission',
                 populate: {
-                    path: 'vendorId', //populate the vendor details of each product in the order
-                    select: 'shopName phoneNumber detailedAddress' //only shop name and email of vendor are needed in order details response
+                    path: 'vendorId', 
+                    select: 'shopName phoneNumber detailedAddress' 
                 }
             });
-            if (!order) {
-                return res.status(404).json({ message: "Order not found" });
-            }
 
-            // --- MULTI-ROLE SECURITY GUARDRAIL (FIXED) ---
-            const currentUserId = req.user?.id;
-            const currentUserRole = req.user?.role;
+        if (!orderDoc) {
+            return res.status(404).json({ message: "Order not found" });
+        }
 
-            // 1. Check if the user is an Admin
-            const isAdmin = currentUserRole === 'admin';
+        // --- MULTI-ROLE SECURITY GUARDRAIL ---
+        const currentUserId = req.user?.id;
+        const currentUserRole = req.user?.role;
 
-            // 2. Check if the user is the Customer who bought it (Safe string conversion)
-            const orderCustomerStrId = order.customerId?._id ? order.customerId._id.toString() : order.customerId?.toString();
-            const isCustomerOwner = currentUserRole === 'customer' && orderCustomerStrId === currentUserId;
+        const isAdmin = currentUserRole === 'admin';
+        const orderCustomerStrId = orderDoc.customerId?._id ? orderDoc.customerId._id.toString() : orderDoc.customerId?.toString();
+        const isCustomerOwner = currentUserRole === 'customer' && orderCustomerStrId === currentUserId;
 
-            // 3. Check if the user is an involved Vendor
-            const isSellerInvolved = currentUserRole === 'vendor' && order.products.some(item => { 
-                const vendorRef = item.productId?.vendorId;
-                
-                if (!vendorRef) return false; // Skip if product has no vendor assignment safely
+        const isSellerInvolved = currentUserRole === 'vendor' && orderDoc.products.some(item => { 
+            const vendorRef = item.productId?.vendorId;
+            if (!vendorRef) return false; 
 
-                // If deeply populated, grab ._id. If unpopulated, grab the raw ID value
-                const vendorStrId = (typeof vendorRef === 'object' && '_id' in vendorRef) 
-                    ? vendorRef._id.toString() 
-                    : vendorRef.toString();
+            const vendorStrId = (typeof vendorRef === 'object' && '_id' in vendorRef) 
+                ? vendorRef._id.toString() 
+                : vendorRef.toString();
 
-                return vendorStrId === currentUserId;
+            return vendorStrId === currentUserId;
+        });
+
+        if (!isAdmin && !isCustomerOwner && !isSellerInvolved) {
+            return res.status(403).json({ 
+                success: false,
+                message: "Forbidden: You do not have permission to view this order" 
             });
+        }
+        // Convert the single document safely into a plain object
+        const order = orderDoc.toObject(); 
+        
+        let totalPriceBeforeDiscount = 0;
+        let totalDiscount = 0;
 
-            // If the current user is NOT an admin, NOT the buyer, and NOT an involved seller... block them!
-            if (!isAdmin && !isCustomerOwner && !isSellerInvolved) {
-                return res.status(403).json({ 
-                    success: false,
-                    message: "Forbidden: You do not have permission to view this order" 
-                });
-            }
+        order.products.forEach(item => {
+            const quantity = item.quantity || 0;
+            const commission = item.productId?.commission || 0;
+            const basePrice = (item.productId?.price || item.priceAtPurchase) + commission; 
+            const itemDiscount = item.productId?.discount || 0; 
 
-            // Security passed! Send response
-            return res.status(200).json({
-                success: true,
-                order
-    });
+            totalPriceBeforeDiscount += basePrice * quantity;
+            totalDiscount += itemDiscount * quantity;
+        });
+
+        const finalPrice = totalPriceBeforeDiscount - totalDiscount;
+
+        // Directly attach the summary object onto the single order root
+        order.summary = {
+            totalPriceBeforeDiscount,
+            totalDiscount,
+            finalPrice: finalPrice < 0 ? 0 : finalPrice 
+        };
+
+        // Send the modified plain object response
+        return res.status(200).json({
+            success: true,
+            order
+        });
 
     } catch (error) {
         next(error);
