@@ -347,12 +347,23 @@ export const getSellerOrders = async (req, res, next) => {
                 orders: [] 
             });
         }
-
-        //Find orders containing any of those product IDs using $in operator
-        const totalOrders = await Order.countDocuments({ "products.productId": { $in: sellerProductIds } });
-        const orders = await Order.find({ 
+        const queryFilter = { 
             "products.productId": { $in: sellerProductIds } 
-        })
+        };
+        
+        const incomingStatus = req.query.status;
+        if (
+            incomingStatus && 
+            typeof incomingStatus === 'string' && 
+            incomingStatus.trim() !== '' && 
+            incomingStatus !== 'undefined' && 
+            incomingStatus !== 'all'
+        ) {
+            queryFilter.status = incomingStatus.trim().toLowerCase();
+        }
+        //Find orders containing any of those product IDs using $in operator
+        const totalOrders = await Order.countDocuments(queryFilter);
+        const orders = await Order.find(queryFilter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
