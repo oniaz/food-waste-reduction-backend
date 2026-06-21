@@ -138,9 +138,9 @@ export const update = async (req, res, next) => {
       });
     }
 
-      if (req.file) {
+    if (req.file) {
       const uploadResult = await uploadToCloudinary(req.file.buffer);
-      
+
       // Clean up the old image asset using the new utility
       await deleteFromCloudinary(product.publicImgId);
 
@@ -219,8 +219,7 @@ export const remove = async (req, res, next) => {
 export const recommend = async (req, res, next) => {
   try {
     const { cartItems } = req.body; // Expecting an array from frontend
-    const suggestions = await recommendationService.getCartRecommendations(cartItems);
-
+    const suggestions = await recommendationService.getCartRecommendations(cartItems, req.user?.id);
     if (suggestions.length === 0) {
       return res.status(200).json({
         success: true,
