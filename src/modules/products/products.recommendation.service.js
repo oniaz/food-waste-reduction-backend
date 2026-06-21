@@ -85,11 +85,8 @@ export const getCartRecommendations = async (cartItems, customerId = null) => {
   if (!cartItems || cartItems.length === 0) return [];
 
   const cartProductIds = cartItems.map(item => item._id).filter(Boolean);
-  
-  // Extract all unique vendor IDs currently occupying the user's cart
   const cartVendorIds = cartItems.map(item => item.vendorId).filter(Boolean).map(id => id.toString());
 
-  // Fetch customer profile location details if logged in
   let customerAddress = null;
   if (customerId) {
     const customer = await Customers.findById(customerId).lean();
@@ -115,9 +112,9 @@ export const getCartRecommendations = async (cartItems, customerId = null) => {
     const result = await geminiModel.generateContent(prompt);
     const recommendations = normalizeRecommendationPayload(parseModelJson(result.response.text()));
 
-    // Normalized strings for explicit location comparisons inside the database aggregation
-    const customerGov = customerAddress?.governorate?.trim().toLowerCase() || "";
-    const customerNeighbourhood = customerAddress?.neighborhood?.trim().toLowerCase() || "";
+    const customerGov = customerAddress?.governorate || "";
+    const customerCity = customerAddress?.city || "";
+    const customerNeighbourhood = customerAddress?.neighborhood || "";
 
     const aiMatches = await Products.aggregate([
       {
@@ -130,7 +127,6 @@ export const getCartRecommendations = async (cartItems, customerId = null) => {
           ],
         },
       },
-      // Join the Vendors collection to access shop addresses and match geographic location
       {
         $lookup: {
           from: "vendors",
@@ -151,6 +147,7 @@ export const getCartRecommendations = async (cartItems, customerId = null) => {
               // Location Matching Bonus Weights
               { $cond: [{ $in: [{ $toString: "$vendorId" }, cartVendorIds] }, 5, 0] }, // Same Vendor Bonus
               { $cond: [{ $eq: ["$vendorDetails.address.neighborhood", customerNeighbourhood] }, 3, 0] }, // Same Neighborhood Bonus
+              { $cond: [{ $eq: ["$vendorDetails.address.city", customerCity] }, 2, 0] }, // New: Same City Bonus
               { $cond: [{ $eq: ["$vendorDetails.address.governorate", customerGov] }, 1, 0] } // Same Governorate Bonus
             ],
           },
@@ -158,7 +155,6 @@ export const getCartRecommendations = async (cartItems, customerId = null) => {
       },
       { $sort: { relevanceScore: -1, createdAt: -1 } },
       { $limit: 4 },
-      // Clean up the output document structure so vendorDetails doesn't bloat the payload
       { $project: { vendorDetails: 0 } }
     ]);
 
