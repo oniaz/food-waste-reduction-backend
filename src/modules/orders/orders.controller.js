@@ -209,7 +209,8 @@ export const getOrderDetails = async (req, res, next) => {
                 path: 'customerId',
                 select: 'name phoneNumber' //only name and email of customer are needed in order details response
             }).populate({
-                path: 'products.productId', //add prices
+                path: 'products.productId', 
+                select: 'price discount commission',
                 populate: {
                     path: 'vendorId', //populate the vendor details of each product in the order
                     select: 'shopName phoneNumber detailedAddress' //only shop name and email of vendor are needed in order details response
