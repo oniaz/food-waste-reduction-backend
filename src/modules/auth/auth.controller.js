@@ -238,6 +238,9 @@ export const forgotPassword = async (req, res, next) => {
             { expiresIn: "15m" }
         );
 
+        user.resetToken = token;
+        await user.save();
+
         const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
 
         const emailResult = await sendPasswordResetEmail(
@@ -304,7 +307,12 @@ export const resetPassword = async (req, res, next) => {
             });
         }
 
+        if (user.resetToken !== token) {
+            return res.status(400).json({ message: "Link is invalid or has expired" });
+        }
+
         user.password = newPassword;
+        user.resetToken = null;
         await user.save();
 
         return res.status(200).json({
