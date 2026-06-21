@@ -35,14 +35,29 @@ const buildCartSignals = (cartItems) => {
 const getFallbackRecommendations = async (cartItems, customerAddress = null) => {
   const { categories, tags, productNames, cartIds, vendorIds } = buildCartSignals(cartItems);
 
-  // Fetch active products and populate vendor address data
-  const activeProducts = await Products.find({ quantity: { $gt: 0 } }).populate("vendorId");
+  const customerNeighbourhood = customerAddress?.neighborhood || "";
+  const customerCity = customerAddress?.city || "";
+  const customerGov = customerAddress?.governorate || "";
+
+  const activeProducts = await Products.find({
+    quantity: { $gt: 0 },
+    _id: { $nin: Array.from(cartIds) },
+    $or: [
+      { category: { $in: Array.from(categories) } },
+      { tags: { $in: Array.from(tags) } },
+      { vendorId: { $in: Array.from(vendorIds) } },
+      ...(customerAddress ? [
+        { "vendorId.address.neighborhood": customerNeighbourhood },
+        { "vendorId.address.city": customerCity },
+        { "vendorId.address.governorate": customerGov }
+      ] : [])
+    ]
+  }).populate("vendorId");
 
   return activeProducts
     .filter((product) => {
-      const productIdStr = product._id?.toString();
       const productNameKey = product.productName?.trim().toLowerCase();
-      return !cartIds.has(productIdStr) && !productNames.has(productNameKey);
+      return !productNames.has(productNameKey);
     })
     .map((product) => {
       const productCategory = product.category?.trim().toLowerCase();
@@ -59,9 +74,13 @@ const getFallbackRecommendations = async (cartItems, customerAddress = null) => 
         if (vendorIds.has(vendor._id?.toString())) score += 5; // Same seller
 
         if (customerAddress) {
-          if (vendor.address?.neighborhood?.trim().toLowerCase() === customerAddress.neighborhood?.trim().toLowerCase()) {
+          if (vendor.address?.neighborhood === customerNeighbourhood) {
             score += 3; // Same neighborhood
-          } else if (vendor.address?.governorate?.trim().toLowerCase() === customerAddress.governorate?.trim().toLowerCase()) {
+          }
+          if (vendor.address?.city === customerCity) {
+            score += 2; // Same city
+          }
+          if (vendor.address?.governorate === customerGov) {
             score += 1; // Same governorate
           }
         }
