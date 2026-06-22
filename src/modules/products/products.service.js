@@ -36,35 +36,44 @@ const generateProductTags = async (productName, description, category) => {
 /**
  * GET ALL PRODUCTS
  */
+// ...existing code...
 export const getAllProducts = async (filters) => {
   const today = new Date();
+
   const matchStage = {
     validDate: { $gte: today },
     expiryDate: { $gt: today },
     quantity: { $gt: 0 },
   };
 
-  if (filters?.category) matchStage.category = filters.category;
-
-  if (filters?.minPrice || filters?.maxPrice) {
-    matchStage.price = {};
-    if (filters.minPrice) matchStage.price.$gte = Number(filters.minPrice);
-    if (filters.maxPrice) matchStage.price.$lte = Number(filters.maxPrice);
+  // CATEGORY (case-insensitive)
+  if (filters?.category) {
+    matchStage.category = new RegExp(`^${filters.category}$`, "i");
   }
 
-  if (filters?.q) {
-    matchStage.$or = [
-      { productName: { $regex: filters.q, $options: "i" } },
-      { tags: { $in: [new RegExp(filters.q, "i")] } },
-    ];
+  // IS DELIVERABLE
+  if (filters?.isDeliverable !== undefined) {
+    matchStage.isDeliverable =
+      filters.isDeliverable === "true" || filters.isDeliverable === true;
   }
 
+  // NOTE: location filters and price filtering based on finalPrice are applied AFTER the vendor lookup
+  // so DO NOT add address.city/governorate or finalPrice-based price filters here.
+
+  // PAGINATION
   const page = Number(filters?.page) || 1;
   const limit = Number(filters?.limit) || 10;
   const skip = (page - 1) * limit;
 
+  // SORT LOGIC
+  let sortStage = { expiryDate: 1 };
+  if (filters?.sort === "price_asc") sortStage = { finalPrice: 1 };
+  if (filters?.sort === "price_desc") sortStage = { finalPrice: -1 };
+  if (filters?.sort === "discount_desc") sortStage = { discount: -1 };
+
   const pipeline = [
     { $match: matchStage },
+
     {
       $lookup: {
         from: "vendors",
@@ -73,19 +82,88 @@ export const getAllProducts = async (filters) => {
         as: "vendor",
       },
     },
+
     { $unwind: "$vendor" },
+
     {
       $lookup: {
-        from: UsersAuth.collection.name,
+        from: "usersauths",
         localField: "vendor.authId",
         foreignField: "_id",
         as: "vendorAuth",
       },
     },
+
     { $unwind: "$vendorAuth" },
-    { $match: { "vendorAuth.accountStatus": "active" } },
-    { $project: { vendor: 0, vendorAuth: 0 } },
-    { $sort: { expiryDate: 1 } },
+
+    {
+      $match: {
+        "vendorAuth.accountStatus": "active",
+      },
+    },
+
+    // FINAL PRICE AFTER DISCOUNT
+    {
+      $addFields: {
+        finalPrice: {
+          $subtract: [
+            "$price",
+            { $multiply: ["$price", { $divide: ["$discount", 100] }] },
+          ],
+        },
+      },
+    },
+
+    // Post-lookup filters that require vendor data or finalPrice
+    ...(function () {
+      const postMatch = {};
+
+      // apply min/max price against finalPrice (if provided)
+      if (filters?.minPrice || filters?.maxPrice) {
+        postMatch.finalPrice = {};
+        if (filters.minPrice)
+          postMatch.finalPrice.$gte = Number(filters.minPrice);
+        if (filters.maxPrice)
+          postMatch.finalPrice.$lte = Number(filters.maxPrice);
+      }
+
+      // apply vendor location filters against the joined vendor document
+      if (filters?.city) {
+        postMatch["vendor.address.city"] = new RegExp(filters.city, "i");
+      }
+      if (filters?.governorate) {
+        postMatch["vendor.address.governorate"] = new RegExp(
+          filters.governorate,
+          "i",
+        );
+      }
+
+      return Object.keys(postMatch).length ? [{ $match: postMatch }] : [];
+    })(),
+
+    // PROJECT RESPONSE (expose vendor address/shopName)
+    {
+      $project: {
+        productName: 1,
+        price: 1,
+        discount: 1,
+        finalPrice: 1,
+        expiryDate: 1,
+        validDate: 1,
+        quantity: 1,
+        isDeliverable: 1,
+        imgUrl: 1,
+        description: 1,
+        tags: 1,
+        category: 1,
+        "vendor.address.city": 1,
+        "vendor.address.governorate": 1,
+        shopName: "$vendor.shopName",
+      },
+    },
+
+    { $sort: sortStage },
+
     {
       $facet: {
         metadata: [{ $count: "total" }],
@@ -121,7 +199,11 @@ export const getProductById = async (id) => {
 export const createProduct = async (data) => {
   // Generate tags using AI if not provided
   if (!data.tags || data.tags.length === 0) {
-    const generatedTags = await generateProductTags(data.productName, data.description, data.category);
+    const generatedTags = await generateProductTags(
+      data.productName,
+      data.description,
+      data.category,
+    );
     data.tags = generatedTags;
   }
   return await Products.create(data);
