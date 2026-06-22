@@ -1,6 +1,7 @@
 import Products from "../../models/products.model.js";
 import UsersAuth from "../../models/usersAuth.model.js";
 import { geminiModel } from "../../config/gemini.js";
+import { groqClient, GROQ_MODEL } from "../../config/groq.js";
 import { SURPLUS_FOOD_TAGS } from "../../data/productTags.js";
 import { parseModelJson } from "../../utils/modelJsonParser.js";
 import mongoose from "mongoose";
@@ -30,6 +31,17 @@ const getCategoryFallbackTags = (category) => {
   }
 };
 
+const extractFlatArray = (parsedData) => {
+  if (!parsedData) return null;
+  if (typeof parsedData === "object" && !Array.isArray(parsedData)) {
+    if (Array.isArray(parsedData.tags)) return parsedData.tags;
+    const values = Object.values(parsedData);
+    if (Array.isArray(values[0])) return values[0];
+  }
+  if (Array.isArray(parsedData) && parsedData[0]?.tags) return parsedData[0].tags;
+  return Array.isArray(parsedData) ? parsedData : null;
+};
+
 /**
  * AI Helper: Generates relevant tags for a product from the master list
  */
@@ -47,18 +59,42 @@ const generateProductTags = async (productName, description, category) => {
   CRITICAL: Respond ONLY with a valid JSON array of strings containing the selected tags (e.g., ["vegan", "snack time", "requires refrigeration"]). Do not include any markdown syntax, formatting, backticks, or text before/after the array.
 `;
 
+  // === STRATEGY 1: Gemini Tagging Generation ===
   try {
     const result = await geminiModel.generateContent(prompt);
     const cleanedResponse = result.response.text().trim();
-
-    // Parse the response string back into a real JavaScript array
-    return parseModelJson(cleanedResponse);
+    const parsedData = parseModelJson(cleanedResponse);
+    const validTags = extractFlatArray(parsedData);
+    if (validTags) {
+      console.log(`⚡ SUCCESS: Tags for "${productName}" generated using GEMINI FLASH`);
+      return validTags;
+    }
   } catch (error) {
-    // INTERCEPT ERROR: Instead of failing out with empty tags, use the bulletproof category map
-    console.error(`AI Tagging Error for ${productName}. Falling back to structural category tags:`, error);
-
-    return getCategoryFallbackTags(category);
+    console.warn(`Gemini AI Tagging Error for ${productName}. Falling back to Groq...`, error.message);
   }
+
+  // === STRATEGY 2: Groq Tagging Generation ===
+  try {
+    const result = await groqClient.chat.completions.create({
+      messages: [{ role: "user", content: prompt }],
+      model: GROQ_MODEL,
+      response_format: { type: "json_object" },
+      temperature: 0.1
+    });
+    const cleanedResponse = result.choices[0].message.content.trim();
+    const parsedData = parseModelJson(cleanedResponse);
+    const validTags = extractFlatArray(parsedData);
+    if (validTags) {
+      console.log(`🚀 FALLBACK SUCCESS: Tags for "${productName}" generated using GROQ (Llama 8B)`);
+      return validTags;
+    }
+  } catch (error) {
+    console.error(`Groq AI Tagging Error for ${productName}. Falling back to structural category tags:`, error.message);
+  }
+
+  // === STRATEGY 3: Local Mapping Baseline ===
+  console.log(`🛡️ GROUND FALLBACK: Using local static category rules to tag "${productName}"`);
+  return getCategoryFallbackTags(category);
 };
 
 /**
