@@ -85,20 +85,22 @@ export const createOrder = async (req, res, next) => {
 
 // GET /orders/my-orders | Auth required (customer) | get logged-in customer orders
 /**
- * @api {get} /api/orders/my-orders Get My Orders
+* @api {get} /api/orders/my-orders Get My Orders
  * @apiName GetMyOrders
  * @apiGroup Orders
  * @apiPermission customer
  * * @description Retrieves a chronological list of historical orders placed by the currently authenticated customer.
- * Supports optional pagination limits via query parameters and sorts records from newest to oldest.
+ * Supports optional pagination offsets, real-time backend pricing computations, and filtering by order status.
  * * @param {import('express').Request} req - Express request object.
  * @param {Object} req.user - Authenticated user payload injected by auth middleware.
  * @param {string} req.user.id - The unique MongoDB ObjectId of the customer.
  * @param {Object} req.query - URL query parameters.
- * @param {string} [req.query.limit=10] - Optional numeric string to cap the total number of orders returned.
+ * @param {string} [req.query.page=1] - Optional target page for pagination sets.
+ * @param {string} [req.query.limit=10] - Optional numeric string to cap the total number of orders per page.
+ * @param {string} [req.query.status] - Optional string to match specific order conditions ('pending', 'completed', etc.).
  * * @param {import('express').Response} res - Express response object used to return JSON payloads.
  * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
- * * @returns {Promise<void>} Sends a JSON response with status 200 containing the filtered orders array, or passes errors to next().
+ * * @returns {Promise<void>} Sends a JSON response with status 200 containing computed pricing data and orders array.
  * * @throws {401} If the request context is missing user verification data or the customer identity cannot be established.
  */
 export const getMyOrders = async (req, res, next) => {  //mock auth was used for testing
@@ -110,12 +112,27 @@ export const getMyOrders = async (req, res, next) => {  //mock auth was used for
         if (!customerId) {
             return res.status(401).json({ message: "Unauthorized: Customer ID not found" });
         }
-
+        // 1. Start with your working baseline filter
+        const queryFilter = { customerId };
+        
+        // // 2. Strict validation check for the status string
+        const incomingStatus = req.query.status;
+        
+        if (
+            incomingStatus && 
+            typeof incomingStatus === 'string' && 
+            incomingStatus.trim() !== '' && 
+            incomingStatus !== 'undefined' && // Guardrail against frontend string serialization bugs
+            incomingStatus !== 'all'          // Guardrail if frontend uses 'all' for resetting filters
+        ) {
+            queryFilter.status = incomingStatus.trim().toLowerCase();
+        }
+        
         const page = parseInt(req.query.page, 10) || 1;   
         const limit = parseInt(req.query.limit, 10) || 10; 
         const skip = (page - 1) * limit;
-        const totalOrders= await Order.countDocuments({ customerId });
-        const rawOrders = await Order.find({ customerId })
+        const totalOrders= await Order.countDocuments(queryFilter);
+        const rawOrders = await Order.find( queryFilter )
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -290,17 +307,19 @@ export const getOrderDetails = async (req, res, next) => {
  * @apiGroup Orders
  * @apiPermission vendor
  * * @description Retrieves a chronological list of customer orders containing products owned by the
- * currently authenticated vendor. It uses a high-performance distinct ID extraction query to find matches, 
- * and automatically restricts schema visibility to minimize data exposure.
+ * currently authenticated vendor, with optional filtering by order status. It filters the product array
+ * to expose only items belonging to the requesting seller and computes a seller-specific financial summary.
  * * @param {import('express').Request} req - Express request object.
  * @param {Object} req.user - Authenticated user payload injected by auth middleware.
  * @param {string} req.user.id - The unique MongoDB ObjectId of the vendor/seller.
  * @param {string} req.user.role - The authorization system role of the user (must be 'vendor').
  * @param {Object} req.query - URL query parameters.
- * @param {string} [req.query.limit=10] - Optional numeric string to cap the total number of orders returned.
+ * @param {string} [req.query.page=1] - Optional target page for pagination results.
+ * @param {string} [req.query.limit=10] - Optional numeric string to cap the total number of orders per page.
+ * @param {string} [req.query.status] - Optional order status filter ('ready', 'completed', 'cancelled', 'pending').
  * * @param {import('express').Response} res - Express response object used to return JSON payloads.
  * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
- * * @returns {Promise<void>} Sends a JSON response with status 200 containing the matching orders array, or passes errors to next().
+ * * @returns {Promise<void>} Sends a JSON response with status 200 containing matching orders with a custom summary object.
  * * @throws {401} If the request context is missing authentication identifiers.
  * @throws {403} If the requester's system role is not explicitly verified as a 'vendor'.
  */
@@ -332,12 +351,23 @@ export const getSellerOrders = async (req, res, next) => {
                 orders: [] 
             });
         }
-
-        //Find orders containing any of those product IDs using $in operator
-        const totalOrders = await Order.countDocuments({ "products.productId": { $in: sellerProductIds } });
-        const orders = await Order.find({ 
+        const queryFilter = { 
             "products.productId": { $in: sellerProductIds } 
-        })
+        };
+        
+        const incomingStatus = req.query.status;
+        if (
+            incomingStatus && 
+            typeof incomingStatus === 'string' && 
+            incomingStatus.trim() !== '' && 
+            incomingStatus !== 'undefined' && 
+            incomingStatus !== 'all'
+        ) {
+            queryFilter.status = incomingStatus.trim().toLowerCase();
+        }
+        //Find orders containing any of those product IDs using $in operator
+        const totalOrders = await Order.countDocuments(queryFilter);
+        const orders = await Order.find(queryFilter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
