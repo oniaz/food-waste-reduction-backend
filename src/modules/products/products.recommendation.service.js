@@ -192,7 +192,7 @@ export const getCartRecommendations = async (cartItems, customerId = null) => {
 
     return await getFallbackRecommendations(cartItems, customerAddress);
   } catch (error) {
-    console.error("AI Recommendation Error:", error);
+    console.error("AI Recommendation Error. Swapping to local fallback algorithm:", error);
     return await getFallbackRecommendations(cartItems, customerAddress);
   }
 };

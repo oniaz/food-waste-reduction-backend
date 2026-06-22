@@ -3,6 +3,32 @@ import UsersAuth from "../../models/usersAuth.model.js";
 import { geminiModel } from "../../config/gemini.js";
 import { SURPLUS_FOOD_TAGS } from "../../data/productTags.js";
 import { parseModelJson } from "../../utils/modelJsonParser.js";
+import mongoose from "mongoose";
+
+const getCategoryFallbackTags = (category) => {
+  const cleanCategory = typeof category === 'string' ? category.trim().toLowerCase() : '';
+
+  switch (cleanCategory) {
+    case 'ready-to-eat meals':
+      return ['ready to eat', 'perishable / consume today', 'single-serve portion'];
+    case 'bakery':
+      return ['quick breakfast (fetoor)', 'perishable / consume today', 'crunchy bite'];
+    case 'dairy':
+      return ['requires continuous fridge', 'creamy texture', 'clearance deal'];
+    case 'frozen food':
+      return ['keep frozen', 'heat & serve', 'family pack / bulk'];
+    case 'snacks and desserts':
+      return ['tea time companion', 'sweet tooth & dessert', 'sweet & syrupy'];
+    case 'drinks':
+      return ['shelf-stable (pantry)', 'single-serve portion'];
+    case 'pantry':
+      return ['shelf-stable (pantry)', 'family pack / bulk', 'clearance deal'];
+    case 'meat and seafood':
+      return ['requires cooking', 'requires continuous fridge', 'family pack / bulk'];
+    default:
+      return ['shelf-stable (pantry)', 'clearance deal'];
+  }
+};
 
 /**
  * AI Helper: Generates relevant tags for a product from the master list
@@ -28,8 +54,10 @@ const generateProductTags = async (productName, description, category) => {
     // Parse the response string back into a real JavaScript array
     return parseModelJson(cleanedResponse);
   } catch (error) {
-    console.error("AI Tagging Error (falling back to empty tags):", error);
-    return []; // Fail safely! If the AI breaks or times out, return empty tags so the user's product is still created.
+    // INTERCEPT ERROR: Instead of failing out with empty tags, use the bulletproof category map
+    console.error(`AI Tagging Error for ${productName}. Falling back to structural category tags:`, error);
+
+    return getCategoryFallbackTags(category);
   }
 };
 
