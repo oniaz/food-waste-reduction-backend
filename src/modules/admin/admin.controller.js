@@ -92,7 +92,7 @@ export const getPendingSellers = async (req, res, next) => {
  * @apiName ChangeSellerStatus
  * @apiGroup Admin
  * @apiPermission admin
- * * @description Updates a vendor's authentication account status (`pending`, `active`, or `suspended`) 
+ * * @description Updates a vendor's authentication account status (`pending`, `incompleteData`, or `suspended`) 
  * and asynchronously creates an immutable system audit log tracking the state transition action.
  * * @param {Object} req - Express request object.
  * @param {Object} req.user - Authenticated session details attached by security middleware.
@@ -101,7 +101,7 @@ export const getPendingSellers = async (req, res, next) => {
  * @param {Object} req.params - URL route parameters.
  * @param {string} req.params.sellerId - The 24-character hexadecimal Mongoose ObjectId of the target Vendor profile.
  * @param {Object} req.body - JSON payload data.
- * @param {"pending"|"active"|"suspended"} req.body.status - The target status to transition the seller account into.
+ * @param {"pending"|"incompleteData"|"suspended"} req.body.status - The target status to transition the seller account into.
  * @param {Object} res - Express response object.
  * @param {Function} next - Express next middleware function for error handling pipelines.
  * * @returns {Object} 200 - Success response containing updated account visibility parameters.
@@ -122,7 +122,7 @@ export const changeSellerStatus = async (req, res, next) => {
         const authId = req.user?.authId; // This is the UsersAuth ID
         const { sellerId } = req.params; 
         const { status } = req.body;
-        const validStatuses = ['pending', 'active', 'suspended'];
+        const validStatuses = ['pending', 'incompleteData', 'active', 'suspended'];
 
         if (!authId) {
             return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
@@ -163,17 +163,19 @@ export const changeSellerStatus = async (req, res, next) => {
         const updatedAuth = await UsersAuth.findByIdAndUpdate(
             vendorProfile.authId,
             { accountStatus: status },
-            { new: true, runValidators: true }
+            { returnDocument: 'after', runValidators: true }
         );
 
         //Maping the action string to match your exact schema enum values
         let logAction;
-        if (status === 'active') {
+        if (status === 'incompleteData'
+            //  || status === 'active'
+        ) {
             logAction = 'approve_vendor';
         } else if (status === 'suspended') {
             if (previousStatus === 'pending') {
                 logAction = 'reject_vendor';
-            } else if (previousStatus === 'active') {
+            } else if (previousStatus === 'active' || previousStatus === 'incompleteData') {
                 logAction = 'suspend_user'; 
             }
         } else if (status === 'pending') {
