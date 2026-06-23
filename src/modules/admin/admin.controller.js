@@ -92,7 +92,7 @@ export const getPendingSellers = async (req, res, next) => {
  * @apiName ChangeSellerStatus
  * @apiGroup Admin
  * @apiPermission admin
- * * @description Updates a vendor's authentication account status (`pending`, `incompleteData`, or `suspended`) 
+ * * @description Updates a vendor's authentication account status (`pending`, `incompleteData`, `active`, or `suspended`) 
  * and asynchronously creates an immutable system audit log tracking the state transition action.
  * * @param {Object} req - Express request object.
  * @param {Object} req.user - Authenticated session details attached by security middleware.
@@ -101,7 +101,7 @@ export const getPendingSellers = async (req, res, next) => {
  * @param {Object} req.params - URL route parameters.
  * @param {string} req.params.sellerId - The 24-character hexadecimal Mongoose ObjectId of the target Vendor profile.
  * @param {Object} req.body - JSON payload data.
- * @param {"pending"|"incompleteData"|"suspended"} req.body.status - The target status to transition the seller account into.
+ * @param {"pending"|"incompleteData"|"active"|"suspended"} req.body.status - The target status to transition the seller account into.
  * @param {Object} res - Express response object.
  * @param {Function} next - Express next middleware function for error handling pipelines.
  * * @returns {Object} 200 - Success response containing updated account visibility parameters.
@@ -113,7 +113,7 @@ export const getPendingSellers = async (req, res, next) => {
  * @returns {string} response.data.newStatus - The definitive live state value matching the update.
  * * @throws {Object} 401 - Unauthorized: If the active middleware state cannot verify a valid `authId`.
  * @throws {Object} 403 - Forbidden: Passed if user credentials possess standard consumer or base vendor access layers.
- * @throws {Object} 400 - Bad Request: Emitted for malformed `sellerId` fields, illegal state request formats, or identity logic redundancy (e.g. state updating to itself).
+ * @throws {Object} 400 - Bad Request: Emitted for malformed `sellerId` fields, illegal state request formats, or identity logic redundancy (e.g. state updating to itself) or unauthorized state paths (e.g. going straight to active from pending).
  * @throws {Object} 404 - Not Found: Triggered if matching database profiles for the targeted Vendor profile, Admin profile context, or Core Authentication mapping values cannot be fetched.
  */
 export const changeSellerStatus = async (req, res, next) => {
