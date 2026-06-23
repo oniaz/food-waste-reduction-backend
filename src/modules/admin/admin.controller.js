@@ -92,7 +92,7 @@ export const getPendingSellers = async (req, res, next) => {
  * @apiName ChangeSellerStatus
  * @apiGroup Admin
  * @apiPermission admin
- * * @description Updates a vendor's authentication account status (`pending`, `active`, or `suspended`) 
+ * * @description Updates a vendor's authentication account status (`pending`, `incompleteData`, `active`, or `suspended`) 
  * and asynchronously creates an immutable system audit log tracking the state transition action.
  * * @param {Object} req - Express request object.
  * @param {Object} req.user - Authenticated session details attached by security middleware.
@@ -101,7 +101,7 @@ export const getPendingSellers = async (req, res, next) => {
  * @param {Object} req.params - URL route parameters.
  * @param {string} req.params.sellerId - The 24-character hexadecimal Mongoose ObjectId of the target Vendor profile.
  * @param {Object} req.body - JSON payload data.
- * @param {"pending"|"active"|"suspended"} req.body.status - The target status to transition the seller account into.
+ * @param {"pending"|"incompleteData"|"active"|"suspended"} req.body.status - The target status to transition the seller account into.
  * @param {Object} res - Express response object.
  * @param {Function} next - Express next middleware function for error handling pipelines.
  * * @returns {Object} 200 - Success response containing updated account visibility parameters.
@@ -113,7 +113,7 @@ export const getPendingSellers = async (req, res, next) => {
  * @returns {string} response.data.newStatus - The definitive live state value matching the update.
  * * @throws {Object} 401 - Unauthorized: If the active middleware state cannot verify a valid `authId`.
  * @throws {Object} 403 - Forbidden: Passed if user credentials possess standard consumer or base vendor access layers.
- * @throws {Object} 400 - Bad Request: Emitted for malformed `sellerId` fields, illegal state request formats, or identity logic redundancy (e.g. state updating to itself).
+ * @throws {Object} 400 - Bad Request: Emitted for malformed `sellerId` fields, illegal state request formats, or identity logic redundancy (e.g. state updating to itself) or unauthorized state paths (e.g. going straight to active from pending).
  * @throws {Object} 404 - Not Found: Triggered if matching database profiles for the targeted Vendor profile, Admin profile context, or Core Authentication mapping values cannot be fetched.
  */
 export const changeSellerStatus = async (req, res, next) => {
@@ -122,7 +122,7 @@ export const changeSellerStatus = async (req, res, next) => {
         const authId = req.user?.authId; // This is the UsersAuth ID
         const { sellerId } = req.params; 
         const { status } = req.body;
-        const validStatuses = ['pending', 'active', 'suspended'];
+        const validStatuses = ['pending', 'incompleteData', 'active', 'suspended'];
 
         if (!authId) {
             return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
@@ -163,17 +163,25 @@ export const changeSellerStatus = async (req, res, next) => {
         const updatedAuth = await UsersAuth.findByIdAndUpdate(
             vendorProfile.authId,
             { accountStatus: status },
-            { new: true, runValidators: true }
+            { returnDocument: 'after', runValidators: true }
         );
 
         //Maping the action string to match your exact schema enum values
         let logAction;
-        if (status === 'active') {
+        if (status === 'incompleteData') {
             logAction = 'approve_vendor';
+        } else if (status === 'active') {
+            if (previousStatus === 'suspended') {
+                logAction = 'reactivate_user';
+            } else {
+                return res.status(400).json({
+                    message: "Bad Request: Accounts can only be manually set to active from a suspended state."
+                });
+            }
         } else if (status === 'suspended') {
             if (previousStatus === 'pending') {
                 logAction = 'reject_vendor';
-            } else if (previousStatus === 'active') {
+            } else if (previousStatus === 'active' || previousStatus === 'incompleteData') {
                 logAction = 'suspend_user'; 
             }
         } else if (status === 'pending') {
