@@ -6,7 +6,7 @@ import express from "express";
 import mongoose from "mongoose";
 import UsersAuth from "../../models/usersAuth.model.js";
 import bcrypt from 'bcrypt';
-import { validateName, validateShopName, validatePhoneNumber, validateAddress } from "../../utils/userDataValidators.js";
+import { validateName, validateShopName, validatePhoneNumber, validateAddress, validatePickupTime, validateMapCoordinates } from "../../utils/userDataValidators.js";
 
 // GET /users/me | Auth required (all roles) | get current user profile with role data
 /**
@@ -125,8 +125,10 @@ export const updateUserInfo = async (req, res, next) => {
 
         let allowedUpdates = {};
         if (currentUserRole === 'vendor') {
-            const { shopName, address, phoneNumber } = req.body;
-            allowedUpdates = { shopName, address, phoneNumber };
+            const { shopName, address, phoneNumber, pickupTime, map } = req.body;
+            allowedUpdates = { shopName, address, phoneNumber, pickupTime };
+            if (map !== undefined) {
+                allowedUpdates["address.map"] = map;
         } 
         
         if (currentUserRole === 'customer') {
@@ -157,9 +159,15 @@ export const updateUserInfo = async (req, res, next) => {
         if (allowedUpdates.address) validationError = validateAddress(allowedUpdates.address, true);
         if (validationError) return res.status(400).json({ message: validationError });
 
+        if (allowedUpdates.pickupTime) validationError = validatePickupTime(allowedUpdates.pickupTime, true);
+        if (validationError) return res.status(400).json({ message: validationError });
+
+        if (allowedUpdates["address.map"]) validationError = validateMapCoordinates(allowedUpdates["address.map"], true);
+        if (validationError) return res.status(400).json({ message: validationError });
+
         let updatedUser;
         const updateOptions = { 
-            new: true,          // Returns the document after update is applied
+            returnDocument: 'after', // Replaces new: true to fix the deprecation warning
             runValidators: true // Ensures the new data adheres to your Mongoose Schema rules
         };
 
@@ -167,6 +175,13 @@ export const updateUserInfo = async (req, res, next) => {
             updatedUser = await Vendor.findByIdAndUpdate(userId, allowedUpdates, updateOptions).lean();
             
             if (!updatedUser) return res.status(404).json({ message: "Vendor profile not found" });
+
+            if (updatedUser.address?.map && updatedUser.pickupTime) {
+                await UsersAuth.updateOne(
+                    { _id: updatedUser.authId, accountStatus: "incompleteData" },
+                    { accountStatus: "active" }
+                );
+            }
 
             return res.status(200).json({
                 success: true,
