@@ -168,10 +168,16 @@ export const changeSellerStatus = async (req, res, next) => {
 
         //Maping the action string to match your exact schema enum values
         let logAction;
-        if (status === 'incompleteData'
-            //  || status === 'active'
-        ) {
+        if (status === 'incompleteData') {
             logAction = 'approve_vendor';
+        } else if (status === 'active') {
+            if (previousStatus === 'suspended') {
+                logAction = 'reactivate_user';
+            } else {
+                return res.status(400).json({
+                    message: "Bad Request: Accounts can only be manually set to active from a suspended state."
+                });
+            }
         } else if (status === 'suspended') {
             if (previousStatus === 'pending') {
                 logAction = 'reject_vendor';
