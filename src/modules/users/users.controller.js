@@ -129,6 +129,7 @@ export const updateUserInfo = async (req, res, next) => {
             allowedUpdates = { shopName, address, phoneNumber, pickupTime };
             if (map !== undefined) {
                 allowedUpdates["address.map"] = map;
+            }
         } 
         
         if (currentUserRole === 'customer') {
