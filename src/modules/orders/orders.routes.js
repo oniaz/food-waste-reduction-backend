@@ -1,41 +1,46 @@
 import express from "express";
-
+import { createOrder , getMyOrders , getOrderDetails , getVendorOrders, cancelOrder, updateOrderStatus , rateOrder} from "./orders.controller.js";
+import authenticate from "../../middleware/authentication.middleware.js" 
+import authorizeRole from "../../middleware/authorization.middleware.js"
+import authorizeStatus from "../../middleware/status.middleware.js";
 const router = express.Router();
 
 // POST /orders | Auth required (customer) | create order from cart items
 // GET /orders/my-orders | Auth required (customer) | get logged-in customer orders
-// GET /orders/:id | Auth required (customer owner, seller involved, admin) | get order details
-// GET /orders/seller | Auth required (seller) | get all orders containing seller products
+// GET /orders/:id | Auth required (customer owner, vendor involved, admin) | get order details
+// GET /orders/vendor | Auth required (vendor) | get all orders containing vendor products
 // PATCH /orders/:id/cancel | Auth required (customer owner) | cancel pending order
-// PATCH /orders/:id/status | Auth required (seller owner, admin) | update order status lifecycle
-// POST /orders/:id/rate | Auth required (customer owner) | rate completed order and update seller rating
+// PATCH /orders/:id/status | Auth required (vendor owner, admin) | update order status lifecycle
+// POST /orders/:id/rate | Auth required (customer owner) | rate completed order and update vendor rating
 
-router.post("/", (req, res) => {
-    res.json({message: "Create order endpoint"});
-});
 
-router.get("/my-orders", (req, res) => {
-    res.json({message: "Get customer orders endpoint"});
-});
+//////TEMPORARY MOCK AUTH MIDDLEWARE JUST FOR TESTING////////////////
+// const mockAuth = (req, res, next) => {
+//     req.user = { id: "65f1234567890abcdef12345", role: "customer" }; // The mock Customer ID from database
+//     next();
+// };
 
-router.get("/:id", (req, res) => {
-    res.json({message: "Get order by ID endpoint"});
-});
+// const mockAuth = (req, res, next) => {
+    //     req.user = { 
+        //         id: "65f5555555555abcdef99999", 
+        //         role: "vendor" 
+        //     };
+        //     next();
+        // };
+        
+router.post("/", authenticate, authorizeRole("customer"), authorizeStatus("active"), createOrder);
 
-router.get("/seller", (req, res) => {
-    res.json({message: "Get seller orders endpoint"});
-});
+router.get("/my-orders", authenticate, authorizeRole("customer"), authorizeStatus("active", "suspended"), getMyOrders);
 
-router.patch("/:id/cancel", (req, res) => {
-    res.json({message: "Cancel order endpoint"});
-});
+router.get("/vendor", authenticate, authorizeRole("vendor"), authorizeStatus("active", "suspended"), getVendorOrders); //must be defined before the more general /:id route to avoid route conflicts
 
-router.patch("/:id/status", (req, res) => {
-    res.json({message: "Update order status endpoint"});
-});
+router.get("/:id", authenticate, authorizeRole("vendor", "customer", "admin"),  authorizeStatus("active", "suspended"), getOrderDetails);
 
-router.post("/:id/rate", (req, res) => {
-    res.json({message: "Rate order endpoint"});
-});
+
+router.patch("/:id/cancel", authenticate, authorizeRole("customer"), authorizeStatus("active", "suspended"), cancelOrder);
+
+router.patch("/:id/status", authenticate, authorizeRole('vendor', 'admin'), authorizeStatus("active", "suspended"), updateOrderStatus);
+
+router.post("/:id/rate",authenticate,authorizeRole("customer"), authorizeStatus("active"), rateOrder);
 
 export default router;
