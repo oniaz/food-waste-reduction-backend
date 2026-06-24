@@ -49,7 +49,7 @@ export const createOrder = async (req, res, next) => {
             if ((item.quantity < 1)|| (item.quantity > product.quantity)) {
                 return res.status(400).json({ message: `Invalid quantity for product ID ${item.productId}` });
             }
-            const finalCustomerPrice = product.price + (product.commission || 0) - (product.discount || 0);
+            const finalCustomerPrice = product.price + (product.commission || 0) - (product.discount || 0)*product.price*0.01;
             verifiedProductsList.push({
                 productId: item.productId,
                 vendorId: product.vendorId, //added to match schema edit
@@ -153,7 +153,7 @@ export const getMyOrders = async (req, res, next) => {
                 const quantity = item.quantity || 0;
                 // Fallback to schema values if product document populated successfully
                 const basePrice = (item.productId?.price || item.priceAtPurchase)+(item.productId?.commission); 
-                const itemDiscount = item.productId?.discount || 0; 
+                const itemDiscount = (item.productId?.discount || 0)*(item.productId?.price)*0.01; 
 
                 totalPriceBeforeDiscount += basePrice * quantity;
                 totalDiscount += itemDiscount * quantity;
@@ -272,7 +272,7 @@ export const getOrderDetails = async (req, res, next) => {
             const quantity = item.quantity || 0;
             const commission = item.productId?.commission || 0;
             const basePrice = (item.productId?.price || item.priceAtPurchase) + commission; 
-            const itemDiscount = item.productId?.discount || 0; 
+            const itemDiscount = (item.productId?.discount || 0)*(item.productId?.price)*0.01; 
 
             totalPriceBeforeDiscount += basePrice * quantity;
             totalDiscount += itemDiscount * quantity;
