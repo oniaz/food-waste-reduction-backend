@@ -256,6 +256,7 @@ export const getAllProducts = async (filters) => {
         tags: 1,
         category: 1,
         vendorId: 1,
+        commission: 1,
         "vendor.address.city": 1,
         "vendor.address.governorate": 1,
         "vendor.address.neighborhood": 1,
@@ -292,8 +293,6 @@ export const getAllProducts = async (filters) => {
 /**
  * GET BY ID
  */
-// ...existing code...
-// ...existing code...
 export const getProductById = async (id) => {
   // validate id
   if (!mongoose.Types.ObjectId.isValid(id)) return null;
@@ -305,7 +304,7 @@ export const getProductById = async (id) => {
       },
     },
 
-    // 🟢 lookup vendor
+    // lookup vendor
     {
       $lookup: {
         from: "vendors",
@@ -322,7 +321,7 @@ export const getProductById = async (id) => {
       },
     },
 
-    // 🟢 حساب السعر النهائي
+    // Final price calculation after discount
     {
       $addFields: {
         finalPrice: {
@@ -334,7 +333,6 @@ export const getProductById = async (id) => {
       },
     },
 
-    // 🟢 رجّعي كل البيانات + العنوان
     {
       $project: {
         _id: 1,
@@ -353,12 +351,14 @@ export const getProductById = async (id) => {
         vendorId: 1,
         createdAt: 1,
         updatedAt: 1,
+        commission: 1,
 
-        // 🔥 أهم جزء
         "vendor.address.governorate": 1,
         "vendor.address.city": 1,
         "vendor.address.neighborhood": 1,
         "vendor.address.detailedAddress": 1,
+        "vendor.address.map": 1,
+        "vendor.pickupTime": 1,
 
         shopName: "$vendor.shopName",
       },
@@ -387,9 +387,15 @@ export const createProduct = async (data) => {
 /**
  * UPDATE
  */
-export const updateProduct = async (id, data) => {
+export const updateProduct = async (id, data, user) => {
   const product = await Products.findById(id);
   if (!product) return null;
+
+  if (user.role === "vendor") {
+    if (product.vendorId.toString() !== user.id) {
+      throw new Error("Not allowed");
+    }
+  }
 
   Object.assign(product, data);
   return await product.save();
@@ -398,7 +404,16 @@ export const updateProduct = async (id, data) => {
 /**
  * DELETE
  */
-export const deleteProduct = async (id) => {
+export const deleteProduct = async (id, user) => {
+  const product = await Products.findById(id);
+  if (!product) return null;
+
+  if (user.role === "vendor") {
+    if (product.vendorId.toString() !== user.id) {
+      throw new Error("Not allowed");
+    }
+  }
+
   return await Products.findByIdAndDelete(id);
 };
 
