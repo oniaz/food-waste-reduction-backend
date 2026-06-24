@@ -1,8 +1,10 @@
 import Products from "../../models/products.model.js";
 import UsersAuth from "../../models/usersAuth.model.js";
+
 import { geminiModel } from "../../config/gemini.js";
 import { SURPLUS_FOOD_TAGS } from "../../data/productTags.js";
 import { parseModelJson } from "../../utils/modelJsonParser.js";
+import mongoose from "mongoose";
 
 /**
  * AI Helper: Generates relevant tags for a product from the master list
@@ -36,7 +38,6 @@ const generateProductTags = async (productName, description, category) => {
 /**
  * GET ALL PRODUCTS
  */
-// ...existing code...
 export const getAllProducts = async (filters) => {
   const today = new Date();
 
@@ -56,7 +57,10 @@ export const getAllProducts = async (filters) => {
     matchStage.isDeliverable =
       filters.isDeliverable === "true" || filters.isDeliverable === true;
   }
-
+  // VENDOR FILTER
+  if (filters?.vendorId && mongoose.Types.ObjectId.isValid(filters.vendorId)) {
+    matchStage.vendorId = new mongoose.Types.ObjectId(filters.vendorId);
+  }
   // NOTE: location filters and price filtering based on finalPrice are applied AFTER the vendor lookup
   // so DO NOT add address.city/governorate or finalPrice-based price filters here.
 
@@ -87,7 +91,7 @@ export const getAllProducts = async (filters) => {
 
     {
       $lookup: {
-        from: "usersauths",
+        from: UsersAuth.collection.name,
         localField: "vendor.authId",
         foreignField: "_id",
         as: "vendorAuth",
@@ -137,6 +141,12 @@ export const getAllProducts = async (filters) => {
           "i",
         );
       }
+      if (filters?.neighborhood) {
+        postMatch["vendor.address.neighborhood"] = new RegExp(
+          filters.neighborhood,
+          "i",
+        );
+      }
 
       return Object.keys(postMatch).length ? [{ $match: postMatch }] : [];
     })(),
@@ -156,8 +166,12 @@ export const getAllProducts = async (filters) => {
         description: 1,
         tags: 1,
         category: 1,
+        vendorId: 1,
         "vendor.address.city": 1,
         "vendor.address.governorate": 1,
+        "vendor.address.neighborhood": 1,
+        "vendor.address.detailedAddress": 1,
+
         shopName: "$vendor.shopName",
       },
     },
@@ -189,10 +203,82 @@ export const getAllProducts = async (filters) => {
 /**
  * GET BY ID
  */
+// ...existing code...
+// ...existing code...
 export const getProductById = async (id) => {
-  return await Products.findById(id);
-};
+  // validate id
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
 
+  const result = await Products.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(id),
+      },
+    },
+
+    // 🟢 lookup vendor
+    {
+      $lookup: {
+        from: "vendors",
+        localField: "vendorId",
+        foreignField: "_id",
+        as: "vendor",
+      },
+    },
+
+    {
+      $unwind: {
+        path: "$vendor",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+
+    // 🟢 حساب السعر النهائي
+    {
+      $addFields: {
+        finalPrice: {
+          $subtract: [
+            "$price",
+            { $multiply: ["$price", { $divide: ["$discount", 100] }] },
+          ],
+        },
+      },
+    },
+
+    // 🟢 رجّعي كل البيانات + العنوان
+    {
+      $project: {
+        _id: 1,
+        productName: 1,
+        category: 1,
+        price: 1,
+        discount: 1,
+        finalPrice: 1,
+        expiryDate: 1,
+        validDate: 1,
+        quantity: 1,
+        isDeliverable: 1,
+        imgUrl: 1,
+        description: 1,
+        tags: 1,
+        vendorId: 1,
+        createdAt: 1,
+        updatedAt: 1,
+
+        // 🔥 أهم جزء
+        "vendor.address.governorate": 1,
+        "vendor.address.city": 1,
+        "vendor.address.neighborhood": 1,
+        "vendor.address.detailedAddress": 1,
+
+        shopName: "$vendor.shopName",
+      },
+    },
+  ]);
+
+  return result[0] || null;
+};
+// ...existing code...
 /**
  * CREATE
  */
