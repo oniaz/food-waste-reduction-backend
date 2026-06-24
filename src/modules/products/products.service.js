@@ -1,5 +1,6 @@
 import Products from "../../models/products.model.js";
 import UsersAuth from "../../models/usersAuth.model.js";
+
 import { geminiModel } from "../../config/gemini.js";
 import { groqClient, GROQ_MODEL } from "../../config/groq.js";
 import { SURPLUS_FOOD_TAGS } from "../../data/productTags.js";
@@ -7,27 +8,40 @@ import { parseModelJson } from "../../utils/modelJsonParser.js";
 import mongoose from "mongoose";
 
 const getCategoryFallbackTags = (category) => {
-  const cleanCategory = typeof category === 'string' ? category.trim().toLowerCase() : '';
+  const cleanCategory =
+    typeof category === "string" ? category.trim().toLowerCase() : "";
 
   switch (cleanCategory) {
-    case 'ready-to-eat meals':
-      return ['ready to eat', 'perishable / consume today', 'single-serve portion'];
-    case 'bakery':
-      return ['quick breakfast (fetoor)', 'perishable / consume today', 'crunchy bite'];
-    case 'dairy':
-      return ['requires continuous fridge', 'creamy texture', 'clearance deal'];
-    case 'frozen food':
-      return ['keep frozen', 'heat & serve', 'family pack / bulk'];
-    case 'snacks and desserts':
-      return ['tea time companion', 'sweet tooth & dessert', 'sweet & syrupy'];
-    case 'drinks':
-      return ['shelf-stable (pantry)', 'single-serve portion'];
-    case 'pantry':
-      return ['shelf-stable (pantry)', 'family pack / bulk', 'clearance deal'];
-    case 'meat and seafood':
-      return ['requires cooking', 'requires continuous fridge', 'family pack / bulk'];
+    case "ready-to-eat meals":
+      return [
+        "ready to eat",
+        "perishable / consume today",
+        "single-serve portion",
+      ];
+    case "bakery":
+      return [
+        "quick breakfast (fetoor)",
+        "perishable / consume today",
+        "crunchy bite",
+      ];
+    case "dairy":
+      return ["requires continuous fridge", "creamy texture", "clearance deal"];
+    case "frozen food":
+      return ["keep frozen", "heat & serve", "family pack / bulk"];
+    case "snacks and desserts":
+      return ["tea time companion", "sweet tooth & dessert", "sweet & syrupy"];
+    case "drinks":
+      return ["shelf-stable (pantry)", "single-serve portion"];
+    case "pantry":
+      return ["shelf-stable (pantry)", "family pack / bulk", "clearance deal"];
+    case "meat and seafood":
+      return [
+        "requires cooking",
+        "requires continuous fridge",
+        "family pack / bulk",
+      ];
     default:
-      return ['shelf-stable (pantry)', 'clearance deal'];
+      return ["shelf-stable (pantry)", "clearance deal"];
   }
 };
 
@@ -38,7 +52,8 @@ const extractFlatArray = (parsedData) => {
     const values = Object.values(parsedData);
     if (Array.isArray(values[0])) return values[0];
   }
-  if (Array.isArray(parsedData) && parsedData[0]?.tags) return parsedData[0].tags;
+  if (Array.isArray(parsedData) && parsedData[0]?.tags)
+    return parsedData[0].tags;
   return Array.isArray(parsedData) ? parsedData : null;
 };
 
@@ -66,11 +81,16 @@ const generateProductTags = async (productName, description, category) => {
     const parsedData = parseModelJson(cleanedResponse);
     const validTags = extractFlatArray(parsedData);
     if (validTags) {
-      console.log(`⚡ SUCCESS: Tags for "${productName}" generated using GEMINI FLASH`);
+      console.log(
+        `⚡ SUCCESS: Tags for "${productName}" generated using GEMINI FLASH`,
+      );
       return validTags;
     }
   } catch (error) {
-    console.warn(`Gemini AI Tagging Error for ${productName}. Falling back to Groq...`, error.message);
+    console.warn(
+      `Gemini AI Tagging Error for ${productName}. Falling back to Groq...`,
+      error.message,
+    );
   }
 
   // === STRATEGY 2: Groq Tagging Generation ===
@@ -79,28 +99,34 @@ const generateProductTags = async (productName, description, category) => {
       messages: [{ role: "user", content: prompt }],
       model: GROQ_MODEL,
       response_format: { type: "json_object" },
-      temperature: 0.1
+      temperature: 0.1,
     });
     const cleanedResponse = result.choices[0].message.content.trim();
     const parsedData = parseModelJson(cleanedResponse);
     const validTags = extractFlatArray(parsedData);
     if (validTags) {
-      console.log(`🚀 FALLBACK SUCCESS: Tags for "${productName}" generated using GROQ (Llama 8B)`);
+      console.log(
+        `🚀 FALLBACK SUCCESS: Tags for "${productName}" generated using GROQ (Llama 8B)`,
+      );
       return validTags;
     }
   } catch (error) {
-    console.error(`Groq AI Tagging Error for ${productName}. Falling back to structural category tags:`, error.message);
+    console.error(
+      `Groq AI Tagging Error for ${productName}. Falling back to structural category tags:`,
+      error.message,
+    );
   }
 
   // === STRATEGY 3: Local Mapping Baseline ===
-  console.log(`🛡️ GROUND FALLBACK: Using local static category rules to tag "${productName}"`);
+  console.log(
+    `🛡️ GROUND FALLBACK: Using local static category rules to tag "${productName}"`,
+  );
   return getCategoryFallbackTags(category);
 };
 
 /**
  * GET ALL PRODUCTS
  */
-// ...existing code...
 export const getAllProducts = async (filters) => {
   const today = new Date();
 
@@ -120,7 +146,10 @@ export const getAllProducts = async (filters) => {
     matchStage.isDeliverable =
       filters.isDeliverable === "true" || filters.isDeliverable === true;
   }
-
+  // VENDOR FILTER
+  if (filters?.vendorId && mongoose.Types.ObjectId.isValid(filters.vendorId)) {
+    matchStage.vendorId = new mongoose.Types.ObjectId(filters.vendorId);
+  }
   // NOTE: location filters and price filtering based on finalPrice are applied AFTER the vendor lookup
   // so DO NOT add address.city/governorate or finalPrice-based price filters here.
 
@@ -151,7 +180,7 @@ export const getAllProducts = async (filters) => {
 
     {
       $lookup: {
-        from: "usersauths",
+        from: UsersAuth.collection.name,
         localField: "vendor.authId",
         foreignField: "_id",
         as: "vendorAuth",
@@ -171,7 +200,7 @@ export const getAllProducts = async (filters) => {
       $addFields: {
         finalPrice: {
           $subtract: [
-            "$price",
+            { $add: ["$price", { $ifNull: ["$commission", 0] }] },
             { $multiply: ["$price", { $divide: ["$discount", 100] }] },
           ],
         },
@@ -201,6 +230,12 @@ export const getAllProducts = async (filters) => {
           "i",
         );
       }
+      if (filters?.neighborhood) {
+        postMatch["vendor.address.neighborhood"] = new RegExp(
+          filters.neighborhood,
+          "i",
+        );
+      }
 
       return Object.keys(postMatch).length ? [{ $match: postMatch }] : [];
     })(),
@@ -220,8 +255,13 @@ export const getAllProducts = async (filters) => {
         description: 1,
         tags: 1,
         category: 1,
+        vendorId: 1,
+        commission: 1,
         "vendor.address.city": 1,
         "vendor.address.governorate": 1,
+        "vendor.address.neighborhood": 1,
+        "vendor.address.detailedAddress": 1,
+
         shopName: "$vendor.shopName",
       },
     },
@@ -254,9 +294,98 @@ export const getAllProducts = async (filters) => {
  * GET BY ID
  */
 export const getProductById = async (id) => {
-  return await Products.findById(id);
-};
+  // validate id
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
 
+  const result = await Products.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(id),
+      },
+    },
+
+    // lookup vendor
+    {
+      $lookup: {
+        from: "vendors",
+        localField: "vendorId",
+        foreignField: "_id",
+        as: "vendor",
+      },
+    },
+
+    {
+      $unwind: {
+        path: "$vendor",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+
+    // lookup vendor auth status
+    {
+      $lookup: {
+        from: "usersauths",
+        localField: "vendor.authId",
+        foreignField: "_id",
+        as: "vendorAuth",
+      },
+    },
+
+    {
+      $unwind: {
+        path: "$vendorAuth",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+
+    // Final price calculation after discount
+    {
+      $addFields: {
+        finalPrice: {
+          $subtract: [
+            { $add: ["$price", { $ifNull: ["$commission", 0] }] },
+            { $multiply: ["$price", { $divide: ["$discount", 100] }] },
+          ],
+        },
+      },
+    },
+
+    {
+      $project: {
+        _id: 1,
+        productName: 1,
+        category: 1,
+        price: 1,
+        discount: 1,
+        finalPrice: 1,
+        expiryDate: 1,
+        validDate: 1,
+        quantity: 1,
+        isDeliverable: 1,
+        imgUrl: 1,
+        description: 1,
+        tags: 1,
+        vendorId: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        commission: 1,
+
+        "vendor.address.governorate": 1,
+        "vendor.address.city": 1,
+        "vendor.address.neighborhood": 1,
+        "vendor.address.detailedAddress": 1,
+        "vendor.address.map": 1,
+        "vendor.pickupTime": 1,
+
+        shopName: "$vendor.shopName",
+        vendorStatus: { $ifNull: ["$vendorAuth.accountStatus", "suspended"] },
+      },
+    },
+  ]);
+
+  return result[0] || null;
+};
+// ...existing code...
 /**
  * CREATE
  */
@@ -276,9 +405,15 @@ export const createProduct = async (data) => {
 /**
  * UPDATE
  */
-export const updateProduct = async (id, data) => {
+export const updateProduct = async (id, data, user) => {
   const product = await Products.findById(id);
   if (!product) return null;
+
+  if (user.role === "vendor") {
+    if (product.vendorId.toString() !== user.id) {
+      throw new Error("Not allowed");
+    }
+  }
 
   Object.assign(product, data);
   return await product.save();
@@ -287,7 +422,16 @@ export const updateProduct = async (id, data) => {
 /**
  * DELETE
  */
-export const deleteProduct = async (id) => {
+export const deleteProduct = async (id, user) => {
+  const product = await Products.findById(id);
+  if (!product) return null;
+
+  if (user.role === "vendor") {
+    if (product.vendorId.toString() !== user.id) {
+      throw new Error("Not allowed");
+    }
+  }
+
   return await Products.findByIdAndDelete(id);
 };
 

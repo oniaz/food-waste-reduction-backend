@@ -28,7 +28,7 @@ const usersAuthSchema = new mongoose.Schema({
     accountStatus: {
         type: String,
         required: true,
-        enum: ["active", "pending", "suspended"],
+        enum: ["active", "pending", "incompleteData", "suspended"],
         default: "active"
     },
     resetToken: {

@@ -92,7 +92,7 @@ export const getPendingSellers = async (req, res, next) => {
  * @apiName ChangeSellerStatus
  * @apiGroup Admin
  * @apiPermission admin
- * * @description Updates a vendor's authentication account status (`pending`, `active`, or `suspended`) 
+ * * @description Updates a vendor's authentication account status (`pending`, `incompleteData`, `active`, or `suspended`) 
  * and asynchronously creates an immutable system audit log tracking the state transition action.
  * * @param {Object} req - Express request object.
  * @param {Object} req.user - Authenticated session details attached by security middleware.
@@ -101,7 +101,7 @@ export const getPendingSellers = async (req, res, next) => {
  * @param {Object} req.params - URL route parameters.
  * @param {string} req.params.sellerId - The 24-character hexadecimal Mongoose ObjectId of the target Vendor profile.
  * @param {Object} req.body - JSON payload data.
- * @param {"pending"|"active"|"suspended"} req.body.status - The target status to transition the seller account into.
+ * @param {"pending"|"incompleteData"|"active"|"suspended"} req.body.status - The target status to transition the seller account into.
  * @param {Object} res - Express response object.
  * @param {Function} next - Express next middleware function for error handling pipelines.
  * * @returns {Object} 200 - Success response containing updated account visibility parameters.
@@ -113,7 +113,7 @@ export const getPendingSellers = async (req, res, next) => {
  * @returns {string} response.data.newStatus - The definitive live state value matching the update.
  * * @throws {Object} 401 - Unauthorized: If the active middleware state cannot verify a valid `authId`.
  * @throws {Object} 403 - Forbidden: Passed if user credentials possess standard consumer or base vendor access layers.
- * @throws {Object} 400 - Bad Request: Emitted for malformed `sellerId` fields, illegal state request formats, or identity logic redundancy (e.g. state updating to itself).
+ * @throws {Object} 400 - Bad Request: Emitted for malformed `sellerId` fields, illegal state request formats, or identity logic redundancy (e.g. state updating to itself) or unauthorized state paths (e.g. going straight to active from pending).
  * @throws {Object} 404 - Not Found: Triggered if matching database profiles for the targeted Vendor profile, Admin profile context, or Core Authentication mapping values cannot be fetched.
  */
 export const changeSellerStatus = async (req, res, next) => {
@@ -122,7 +122,7 @@ export const changeSellerStatus = async (req, res, next) => {
         const authId = req.user?.authId; // This is the UsersAuth ID
         const { sellerId } = req.params; 
         const { status } = req.body;
-        const validStatuses = ['pending', 'active', 'suspended'];
+        const validStatuses = ['pending', 'incompleteData', 'active', 'suspended'];
 
         if (!authId) {
             return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
@@ -163,17 +163,25 @@ export const changeSellerStatus = async (req, res, next) => {
         const updatedAuth = await UsersAuth.findByIdAndUpdate(
             vendorProfile.authId,
             { accountStatus: status },
-            { new: true, runValidators: true }
+            { returnDocument: 'after', runValidators: true }
         );
 
         //Maping the action string to match your exact schema enum values
         let logAction;
-        if (status === 'active') {
+        if (status === 'incompleteData') {
             logAction = 'approve_vendor';
+        } else if (status === 'active') {
+            if (previousStatus === 'suspended') {
+                logAction = 'reactivate_user';
+            } else {
+                return res.status(400).json({
+                    message: "Bad Request: Accounts can only be manually set to active from a suspended state."
+                });
+            }
         } else if (status === 'suspended') {
             if (previousStatus === 'pending') {
                 logAction = 'reject_vendor';
-            } else if (previousStatus === 'active') {
+            } else if (previousStatus === 'active' || previousStatus === 'incompleteData') {
                 logAction = 'suspend_user'; 
             }
         } else if (status === 'pending') {
@@ -359,5 +367,125 @@ export const getAdminLogs = async (req, res, next) => {
     } catch (error) {
         console.log(error);
         next(error); 
+    }
+};
+
+
+// PATCH /admin/customers/:customerId/status | Auth required (admin) | suspend or activate user
+/**
+ * @api {patch} /api/admin/customer/:customerId/status Update Customer Account Status
+ * @apiName ChangeCustomerStatus
+ * @apiGroup Admin
+ * @apiPermission admin
+ * @description Modifies the authentication lifecycle state (`accountStatus`) of a customer profile. 
+ * Enforces administrative system guardrails:
+ * 1. Restricts request access strictly to accounts with the 'admin' authorization role.
+ * 2. Blocks updates if the new status matches the target account's current status.
+ * 3. Restricts manual activations to records currently sitting in a 'pending' or 'suspended' state.
+ * 4. Automatically writes an immutable audit record to the system logs repository upon successful updates.
+ *
+ * @param {import('express').Request} req - Express request object.
+ * @param {Object} req.params - URL route parameter maps.
+ * @param {string} req.params.customerId - The unique MongoDB ObjectId of the target Customer document.
+ * @param {Object} req.body - HTTP request body payload wrapper.
+ * @param {string} req.body.status - Target account status to enforce ('pending', 'active', 'suspended').
+ * @param {Object} req.user - Identity payload decoded and attached by authentication middlewares.
+ * @param {string} req.user.authId - The unique MongoDB ObjectId of the administrative manager executing the write.
+ * @param {string} req.user.role - System access authority verification tag (must evaluate to 'admin').
+ * @param {import('express').Response} res - Express response object used to transmit HTTP network responses.
+ * @param {import('express').NextFunction} next - Express callback handler routed to centralized error handling components.
+ * @returns {Promise<void>} Resolves with a status 200 payload displaying updating model keys, or forwards caught exceptions.
+ * @throws {400} Sent if route params fail ObjectId compliance, statuses are invalid, or lifecycle transition bounds are violated.
+ * @throws {401} Sent if the request header context is missing valid authentication markers.
+ * @throws {403} Sent if the account role evaluates to a configuration other than 'admin'.
+ * @throws {404} Sent if referenced Admin, Customer, or UsersAuth base profiles cannot be found in database documents.
+ */
+export const changeCustomerStatus = async (req, res, next) => { //suspend and activate customer account
+    try {
+        const currentUserRole = req.user?.role;
+        const authId = req.user?.authId; // This is the UsersAuth ID
+        const { customerId } = req.params; 
+        const { status } = req.body;
+        const validStatuses = ['pending', 'active', 'suspended'];
+
+        if (!authId) {
+            return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
+        }
+        if (currentUserRole !== 'admin') {
+            return res.status(403).json({ message: "Forbidden: Unauthorized access" });
+        }
+
+        if (!customerId || !mongoose.Types.ObjectId.isValid(customerId)) {
+            return res.status(400).json({ message: "Invalid customer ID format" });
+        }
+        if (!status || !validStatuses.includes(status)) {
+            return res.status(400).json({ message: "Invalid or missing status value" });
+        }
+
+        const adminProfile = await Admin.findOne({ authId });
+        if (!adminProfile) {
+            return res.status(404).json({ message: "Admin profile record not found" });
+        }
+
+        const customerProfile = await Customer.findById(customerId);
+        if (!customerProfile) {
+            return res.status(404).json({ message: "Customer profile not found" });
+        }
+
+        const currentAuth = await UsersAuth.findById(customerProfile.authId);
+        if (!currentAuth) {
+            return res.status(404).json({ message: "Associated authentication account not found" });
+        }
+        const previousStatus = currentAuth.accountStatus;
+
+        if (previousStatus === status) {
+            return res.status(400).json({ message: `Customer account is already ${status}` });
+        }
+
+        let logAction;
+        if (status === 'active') {
+            if (previousStatus === 'suspended') {
+                logAction = 'reactivate_user';
+            } else if (previousStatus === 'pending') {
+                logAction = 'reactivate_user'; // Custom action tag for clean audit sorting
+            } else {
+                return res.status(400).json({
+                    message: "Bad Request: Customer accounts can only be set to active from a pending or suspended state."
+                });
+            }
+        } else if (status === 'suspended') {
+            logAction = 'suspend_user'; 
+        } else if (status === 'pending') {
+            logAction = 'suspend_user'; 
+        }
+
+        // Perform the write update operation
+        const updatedAuth = await UsersAuth.findByIdAndUpdate(
+            customerProfile.authId,
+            { accountStatus: status },
+            { returnDocument: 'after', runValidators: true }
+        );
+
+        // Create the system log 
+        await Logs.create({
+            adminId: adminProfile._id, 
+            userId: customerProfile.authId, // Targets 'UsersAuth' of the customer being updated
+            action: logAction,
+            description: `Changed customer with Id ${customerId} status from '${previousStatus}' to '${status}'.`
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: `Customer account status successfully updated to ${status}`,
+            data: {
+                customerId: customerProfile._id,
+                authId: updatedAuth._id,
+                newStatus: updatedAuth.accountStatus
+            }
+        });
+        
+    } catch (error) {
+        console.log(error);
+        next(error);
     }
 };

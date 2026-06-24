@@ -14,7 +14,7 @@ const adminLogsSchema = new mongoose.Schema({
     action: {
         type: String,
         required: true,
-        enum: ["suspend_user", "activate_user", "approve_vendor", "reject_vendor"] // Expand as needed
+        enum: ["suspend_user", "activate_user", "approve_vendor", "reject_vendor", "reactivate_user"] // Expand as needed
     },
     description: {
         type: String,

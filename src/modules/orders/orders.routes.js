@@ -30,16 +30,16 @@ const router = express.Router();
         
 router.post("/", authenticate, authorizeRole("customer"), authorizeStatus("active"), createOrder);
 
-router.get("/my-orders", authenticate,authorizeRole("customer"), getMyOrders);
+router.get("/my-orders", authenticate, authorizeRole("customer"), authorizeStatus("active", "suspended"), getMyOrders);
 
-router.get("/seller", authenticate,authorizeRole("vendor"), getSellerOrders); //must be defined before the more general /:id route to avoid route conflicts
+router.get("/seller", authenticate, authorizeRole("vendor"), authorizeStatus("active", "suspended"), getSellerOrders); //must be defined before the more general /:id route to avoid route conflicts
 
-router.get("/:id", authenticate, getOrderDetails);
+router.get("/:id", authenticate, authorizeRole("vendor", "customer", "admin"),  authorizeStatus("active", "suspended"), getOrderDetails);
 
 
-router.patch("/:id/cancel", authenticate, authorizeRole("customer"), cancelOrder);
+router.patch("/:id/cancel", authenticate, authorizeRole("customer"), authorizeStatus("active", "suspended"), cancelOrder);
 
-router.patch("/:id/status", authenticate, authorizeRole('vendor', 'admin'), updateOrderStatus);
+router.patch("/:id/status", authenticate, authorizeRole('vendor', 'admin'), authorizeStatus("active", "suspended"), updateOrderStatus);
 
 router.post("/:id/rate",authenticate,authorizeRole("customer"), authorizeStatus("active"), rateOrder);
 

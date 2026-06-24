@@ -146,3 +146,45 @@ export function validateName(name, isUpdate = false) {
     
     return null;
 }
+
+export function validateMapCoordinates(map, isUpdate = false) {
+    if (isUpdate && map === undefined) return null;
+    if (map === null) return "Map coordinates cannot be set to null.";
+    
+    if (!Array.isArray(map)) return "Map must be an array of coordinates [longitude, latitude].";
+    if (map.length !== 2) return "Map coordinates must contain exactly two numbers: [longitude, latitude].";
+    
+    const [lng, lat] = map;
+    if (typeof lng !== 'number' || typeof lat !== 'number') return "Coordinates must be numeric values.";
+    if (lng < -180 || lng > 180) return "Longitude must be between -180 and 180.";
+    if (lat < -90 || lat > 90) return "Latitude must be between -90 and 90.";
+    
+    return null;
+}
+
+export function validatePickupTime(pickupTime, isUpdate = false) {
+    if (isUpdate && pickupTime === undefined) return null;
+    if (pickupTime === null) return "Pickup time cannot be set to null.";
+
+    if (typeof pickupTime !== 'object' || Array.isArray(pickupTime)) {
+        return "Pickup time must be a single schedule object.";
+    }
+
+    const { days, from, to } = pickupTime;
+
+    if (!Array.isArray(days) || days.length === 0) {
+        return "Pickup schedule requires an array of at least one day.";
+    }
+
+    const timeRegex = /^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$/; // Validates "HH:MM" 24h format
+
+    if (typeof from !== 'string' || !timeRegex.test(from)) {
+        return "Opening time 'from' must be in HH:MM 24-hour format.";
+    }
+    if (typeof to !== 'string' || !timeRegex.test(to)) {
+        return "Closing time 'to' must be in HH:MM 24-hour format.";
+    }
+
+    return null;
+}
+
