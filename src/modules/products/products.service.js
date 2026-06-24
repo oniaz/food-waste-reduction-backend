@@ -321,6 +321,23 @@ export const getProductById = async (id) => {
       },
     },
 
+    // lookup vendor auth status
+    {
+      $lookup: {
+        from: "usersauths",
+        localField: "vendor.authId",
+        foreignField: "_id",
+        as: "vendorAuth",
+      },
+    },
+
+    {
+      $unwind: {
+        path: "$vendorAuth",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+
     // Final price calculation after discount
     {
       $addFields: {
@@ -361,6 +378,7 @@ export const getProductById = async (id) => {
         "vendor.pickupTime": 1,
 
         shopName: "$vendor.shopName",
+        vendorStatus: { $ifNull: ["$vendorAuth.accountStatus", "suspended"] },
       },
     },
   ]);
