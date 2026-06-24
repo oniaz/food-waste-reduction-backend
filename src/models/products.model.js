@@ -32,12 +32,7 @@ const productSchema = new mongoose.Schema(
       required: true,
       default: 0,
       min: 0,
-      validate: {
-        validator: function (value) {
-          return value <= this.price; //false if discount is greater than price with commission, which is invalid
-        },
-        message: "Discount cannot be greater than the price with commission.",
-      },
+      max:100 //modified since discount is saved and calculated as percentage
     },
     expiryDate: {
       type: Date,
