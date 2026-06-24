@@ -200,7 +200,7 @@ export const getAllProducts = async (filters) => {
       $addFields: {
         finalPrice: {
           $subtract: [
-            "$price",
+            { $add: ["$price", { $ifNull: ["$commission", 0] }] },
             { $multiply: ["$price", { $divide: ["$discount", 100] }] },
           ],
         },
@@ -326,7 +326,7 @@ export const getProductById = async (id) => {
       $addFields: {
         finalPrice: {
           $subtract: [
-            "$price",
+            { $add: ["$price", { $ifNull: ["$commission", 0] }] },
             { $multiply: ["$price", { $divide: ["$discount", 100] }] },
           ],
         },
