@@ -4,27 +4,18 @@
 
 Base URL: `/api`
 
-This document describes all available API endpoints for the frontend team.
+This documentation is extracted from the current backend implementation and reflects the actual request and response contracts.
 
 Security:
 - Authentication uses a JWT stored in an `httpOnly` cookie named `token`.
 - For browser requests, use `credentials: 'include'` or `withCredentials: true`.
-- Some endpoints require the user role to be `customer`, `vendor`, or `admin`.
+- Some endpoints require `customer`, `vendor`, or `admin` roles.
 
 Common headers:
-- `Content-Type: application/json`
 - `Accept: application/json`
+- `Content-Type: application/json` for JSON requests
 
-Example frontend fetch options:
-
-```js
-fetch(`${API_BASE_URL}/auth/login`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  credentials: 'include',
-  body: JSON.stringify({ username, password }),
-});
-```
+For multipart file uploads, use `Content-Type: multipart/form-data`.
 
 ---
 
@@ -45,16 +36,24 @@ Request body:
 }
 ```
 
+Rules:
+- `username`: 5-30 chars, no spaces
+- `password`: at least 6 chars, no spaces
+- `email`: valid email format
+- `role`: must be `customer`, `vendor`, or `admin`
+- `vendor` requires `profileData` with `shopName`, `phoneNumber`, `taxNumber`, and `address`
+- `customer` requires `profileData` with `name`, `phoneNumber`, and `address`
+
 Vendor `profileData` example:
 ```json
 {
   "shopName": "My Shop",
-  "phoneNumber": "0123456789",
+  "phoneNumber": "+201234567890",
   "taxNumber": "123456789",
   "address": {
-    "governorate": "Cairo",
-    "city": "Nasr City",
-    "neighborhood": "Al Rehab",
+    "governorate": "cairo",
+    "city": "nasr city",
+    "neighborhood": "al rehab",
     "detailedAddress": "Building 12"
   }
 }
@@ -63,26 +62,29 @@ Vendor `profileData` example:
 Customer `profileData` example:
 ```json
 {
-  "name": "John Doe",
-  "phoneNumber": "0123456789",
+  "name": {
+    "firstName": "John",
+    "lastName": "Doe"
+  },
+  "phoneNumber": "+201234567890",
   "address": {
-    "governorate": "Cairo",
-    "city": "Nasr City",
-    "neighborhood": "Al Rehab",
+    "governorate": "cairo",
+    "city": "nasr city",
+    "neighborhood": "al rehab",
     "detailedAddress": "Flat 3"
   }
 }
 ```
 
-Response:
-- `201` success
+Responses:
+- `201` success: `{ "message": "User registered successfully." }`
 - `400` validation error
 
 ---
 
 ### POST /api/auth/login
 
-Login and receive an `httpOnly` cookie.
+Login and receive an auth cookie.
 
 Request body:
 ```json
@@ -92,9 +94,9 @@ Request body:
 }
 ```
 
-Response:
-- `200` success
-- `400` invalid credentials
+Responses:
+- `200` success: `{ "message": "Login successful." }`
+- `400` invalid credentials or missing fields
 
 ---
 
@@ -102,31 +104,29 @@ Response:
 
 Logout and clear the auth cookie.
 
-Headers:
-- `Cookie: token=...`
-
-Response:
-- `200` success
+Responses:
+- `200` success: `{ "message": "Logged out successfully." }`
 
 ---
 
 ### POST /api/auth/forgot-password
 
-Send a password reset email.
+Request a password reset email.
 
 Request body:
 ```json
 { "username": "string" }
 ```
 
-Response:
-- `200` success (always returns the same message for security)
+Responses:
+- `200` generic success message
+- `400` missing username
 
 ---
 
 ### POST /api/auth/reset-password
 
-Reset the password using a valid token.
+Reset the password using the reset token.
 
 Request body:
 ```json
@@ -136,9 +136,10 @@ Request body:
 }
 ```
 
-Response:
-- `200` success
-- `400` invalid or expired token
+Responses:
+- `200` success: `{ "message": "Password reset successfully!" }`
+- `400` invalid token or missing fields
+- `404` user not found
 
 ---
 
@@ -153,52 +154,67 @@ Permissions:
 - `vendor`
 - `admin`
 
-Response contains role-specific data for customer, vendor, or admin.
+Responses:
+- `200` success with one of:
+  - `customerData`
+  - `vendorData`
+  - `adminData`
+- `401` unauthorized
+- `403` forbidden
+- `404` profile not found
 
 ---
 
 ### PATCH /api/users/me
 
-Update the current user's profile.
+Update the authenticated user's profile.
 
 Permissions:
 - `customer`
 - `vendor`
 
-Request body examples:
-
-Customer update:
+Vendor update body example:
 ```json
 {
-  "name": "New Name",
-  "phoneNumber": "0123456789",
+  "shopName": "string",
+  "phoneNumber": "+201234567890",
   "address": {
-    "governorate": "Cairo",
-    "city": "Maadi",
-    "neighborhood": "Corniche",
-    "detailedAddress": "Street 7"
+    "governorate": "string",
+    "city": "string",
+    "neighborhood": "string",
+    "detailedAddress": "string"
+  },
+  "pickupTime": {
+    "days": ["Sunday"],
+    "from": "HH:MM",
+    "to": "HH:MM"
+  },
+  "map": [longitude, latitude]
+}
+```
+
+Customer update body example:
+```json
+{
+  "name": {
+    "firstName": "string",
+    "lastName": "string"
+  },
+  "phoneNumber": "+201234567890",
+  "address": {
+    "governorate": "string",
+    "city": "string",
+    "neighborhood": "string",
+    "detailedAddress": "string"
   }
 }
 ```
 
-Vendor update:
-```json
-{
-  "shopName": "New Shop Name",
-  "phoneNumber": "0123456789",
-  "pickupTime": "10:00 - 13:00",
-  "address": {
-    "governorate": "Cairo",
-    "city": "Nasr City",
-    "neighborhood": "Al Rehab",
-    "detailedAddress": "Building 12"
-  }
-}
-```
-
-Response:
-- `200` updated profile
-- `400` invalid fields
+Responses:
+- `200` success with updated `customerData` or `vendorData`
+- `400` invalid update payload
+- `401` unauthorized
+- `404` profile not found
 
 ---
 
@@ -214,45 +230,63 @@ Request body:
 }
 ```
 
-Response:
-- `200` success
-- `400` invalid credentials
+Responses:
+- `200` success: `{ "message": "Password changed successfully" }`
+- `400` invalid credentials or missing fields
+- `401` unauthorized
+- `404` auth record not found
 
 ---
 
 ### GET /api/users/vendor-dashboard
 
-Vendor analytics summary.
+Get analytics summary for the authenticated vendor.
 
 Permissions:
 - `vendor`
 
-Response:
-- vendor dashboard data
+Responses:
+- `200` success with `analytics`:
+  - `profit`
+  - `productsInCurrentOrders`
+  - `productsInCompletedOrders`
+  - `numberOfCustomers`
 
 ---
 
 ### GET /api/users/get-vendors
 
-Get all vendors.
+Get a paginated list of all vendor profiles.
 
 Permissions:
 - `admin`
 
-Response:
-- list of vendor profiles
+Query parameters:
+- `page` default `1`
+- `limit` default `10`
+
+Responses:
+- `200` success with pagination and `vendors`
+- `401` unauthorized
+- `403` forbidden
 
 ---
 
 ### GET /api/users/get-customers
 
-Get all customers.
+Get a paginated list of all customer profiles.
 
 Permissions:
 - `admin`
 
-Response:
-- list of customer profiles
+Query parameters:
+- `page` default `1`
+- `limit` default `10`
+
+Responses:
+- `200` success with pagination and `customers`
+- `401` unauthorized
+- `403` forbidden
 
 ---
 
@@ -260,44 +294,58 @@ Response:
 
 ### GET /api/products
 
-Get all active products.
+Get active, non-expired products with available stock.
 
-Query parameters:
-- optional filters may exist in service logic
+Supported query parameters:
+- `page` default `1`
+- `limit` default `10`
+- `sort`: `price_asc`, `price_desc`, `discount_desc`
+- `category`: exact category name, case-insensitive
+- `vendorId`: vendor ObjectId filter
+- `isDeliverable`: `true` or `false`
+- `minPrice`: minimum `finalPrice`
+- `maxPrice`: maximum `finalPrice`
+- `city`, `governorate`, `neighborhood`: vendor location filters
 
-Response:
-- array of products
+Responses:
+- `200` success with:
+  - `page`
+  - `limit`
+  - `total`
+  - `totalPages`
+  - `data` array of products
 
 ---
 
-### GET /api/products/search?q=...
+### GET /api/products/search
 
-Search products by query string.
+Search products by keyword.
 
-Example:
-- `/api/products/search?q=apple`
+Query parameters:
+- `q` search string
 
-Response:
-- array of matching products
+Responses:
+- `200` success with `data` array of matching products
 
 ---
 
 ### GET /api/products/categories
 
-Get the stored product categories data.
+Get product category configuration.
 
-Response:
-- array of category metadata
+Responses:
+- `200` success with `data` array
 
 ---
 
 ### GET /api/products/:id
 
-Get a single product by ID.
+Get product details by ID.
 
-Response:
-- product details
-- `404` if not found
+Responses:
+- `200` success with `data` product object
+- `400` invalid product ID
+- `404` product not found
 
 ---
 
@@ -310,30 +358,50 @@ Permissions:
 
 Headers:
 - `Content-Type: multipart/form-data`
-- `credentials: include`
 
-Fields:
-- product data fields in the request body
-- product image file upload via the upload middleware
+Required body fields:
+- `productName`
+- `price`
+- `expiryDate`
+- `quantity`
+- `category`
+- `isDeliverable`
+- `image` file upload
 
-Response:
-- `201` created product
+Optional fields:
+- `discount`
+- `description`
+- `tags`
+
+Notes:
+- `vendorId` is set from the authenticated user.
+- `tags` may be generated automatically if omitted or empty.
+
+Responses:
+- `201` success with `data` created product
+- `400` invalid request or missing image
 
 ---
 
 ### PUT /api/products/:id
 
-Update a product.
+Update an existing product.
 
 Permissions:
-- `vendor`
-- vendor must own the product
+- `vendor` owner of the product
 
 Headers:
 - `Content-Type: multipart/form-data`
 
-Response:
-- updated product
+Request body:
+- any product fields to update
+- optional `image` file to replace the existing image
+
+Responses:
+- `200` success with `data` updated product
+- `400` invalid request
+- `403` forbidden if not owner
+- `404` product not found
 
 ---
 
@@ -342,11 +410,12 @@ Response:
 Delete a product.
 
 Permissions:
-- `vendor`
-- vendor must own the product
+- `vendor` owner of the product
 
-Response:
-- success message
+Responses:
+- `200` success with `message` confirmed
+- `403` forbidden if not owner
+- `404` product not found
 
 ---
 
@@ -362,18 +431,22 @@ Request body:
 {
   "cartItems": [
     {
-      "_id": "productId",
-      "vendorId": "vendorId",
       "category": "string",
       "productName": "string",
-      "tags": ["tag1", "tag2"]
+      "tags": ["string"]
     }
   ]
 }
 ```
 
-Response:
-- recommended products array
+Notes:
+- `cartItems` must be a non-empty array.
+- Each item must include `category` and `productName`.
+- `tags` is optional but must be an array of non-empty strings if present.
+
+Responses:
+- `200` success with `data` recommendations array
+- `400` invalid request body
 
 ---
 
@@ -381,7 +454,7 @@ Response:
 
 ### POST /api/orders
 
-Create a new order from the authenticated customer's cart.
+Create a new order.
 
 Permissions:
 - `customer`
@@ -393,77 +466,85 @@ Request body:
     { "productId": "string", "quantity": number }
   ],
   "shippingAddress": "string",
-  "paymentMethod": "cash_on_delivery"
+  "paymentMethod": "credit_card|paypal|cash_on_delivery"
 }
 ```
 
 Notes:
-- If `shippingAddress` is omitted, the customer profile address is used if complete.
+- `shippingAddress` may be omitted only if the customer's profile contains a complete address.
 - `paymentMethod` defaults to `cash_on_delivery`.
+- The backend validates product existence, stock, and vendor active status.
 
-Response:
-- `201` order created
+Responses:
+- `201` success with `message` and `order`
+- `400` invalid request, incomplete address, or stock issues
+- `404` product not found
 
 ---
 
 ### GET /api/orders/my-orders
 
-Get orders for the authenticated customer.
+Get paginated orders for the authenticated customer.
 
 Permissions:
 - `customer`
 
-Query params:
-- `page` (default 1)
-- `limit` (default 10)
-- `status` (optional)
+Query parameters:
+- `page` default `1`
+- `limit` default `10`
+- `status` optional filter
 
-Response:
-- paginated order list
+Responses:
+- `200` success with `count`, `totalOrders`, `totalPages`, `currentPage`, and `orders`
 
 ---
 
 ### GET /api/orders/vendor
 
-Get orders involving the authenticated vendor's products.
+Get paginated orders containing the authenticated vendor's products.
 
 Permissions:
 - `vendor`
 
-Query params:
-- `page` (default 1)
-- `limit` (default 10)
-- `status` (optional)
+Query parameters:
+- `page` default `1`
+- `limit` default `10`
+- `status` optional filter
 
-Response:
-- paginated vendor order list
+Responses:
+- `200` success with `orders` and pagination metadata
 
 ---
 
 ### GET /api/orders/:id
 
-Get order details.
+Get order details by ID.
 
 Permissions:
-- `customer` (order owner)
-- `vendor` (involved vendor)
+- `customer` if order owner
+- `vendor` if involved in the order
 - `admin`
 
-Response:
-- order details
+Responses:
+- `200` success with `order`
+- `400` invalid order ID
+- `403` forbidden
+- `404` order not found
 
 ---
 
 ### PATCH /api/orders/:id/cancel
 
-Cancel an order.
+Cancel a pending or ready order.
 
 Permissions:
-- `customer`
-- only the order owner can cancel
+- `customer` owner of the order
 
-Response:
-- `200` success
+Responses:
+- `200` success with updated `order`
+- `400` invalid status or order not cancelable
+- `403` forbidden if not owner
+- `404` order not found
 
 ---
 
@@ -472,7 +553,7 @@ Response:
 Update an order status.
 
 Permissions:
-- `vendor` (must be involved)
+- `vendor` involved in the order
 - `admin`
 
 Request body:
@@ -481,10 +562,16 @@ Request body:
 ```
 
 Notes:
-- `cancelled` should not be set here; use the cancel route.
+- `cancelled` is rejected here.
+- Orders already `completed`, `cancelled`, or `abandoned` cannot be updated.
+- `completed` awards customer loyalty points and increments vendor money owed.
+- `abandoned` restores product inventory.
 
-Response:
-- updated order
+Responses:
+- `200` success with updated `order`
+- `400` invalid status or immutable order
+- `403` forbidden
+- `404` order not found
 
 ---
 
@@ -493,19 +580,125 @@ Response:
 Rate a completed order.
 
 Permissions:
-- `customer`
-- only the order customer can rate
+- `customer` owner of the order
 
-Request body example:
+Request body:
 ```json
-{
-  "rating": 4,
-  "review": "Great service"
-}
+{ "rating": 1 }
 ```
 
-Response:
-- `200` success
+Notes:
+- `rating` must be an integer between `1` and `5`.
+- Only orders with `status: completed` may be rated.
+- The current implementation ignores a `review` field if provided.
+- The backend sets `isRated: true` on the order document even though the schema does not define it explicitly.
+
+Responses:
+- `200` success with updated `order`
+- `400` invalid rating or order state
+- `403` forbidden if not owner
+- `404` order not found
+
+---
+
+## Admin Endpoints
+
+### GET /api/admin/pending-vendors
+
+Get vendors whose auth status is `pending`.
+
+Permissions:
+- `admin`
+
+Query parameters:
+- `page` default `1`
+- `limit` default `10`
+
+Responses:
+- `200` success with pagination and `pendingVendors`
+- `401` unauthorized
+- `403` forbidden
+
+---
+
+### PATCH /api/admin/vendors/:vendorId/status
+
+Update a vendor account status.
+
+Permissions:
+- `admin`
+
+Request body:
+```json
+{ "status": "pending|incompleteData|active|suspended" }
+```
+
+Notes:
+- `active` can only be set from `suspended` in the current implementation.
+- Setting the same status again returns `400`.
+
+Responses:
+- `200` success with status update data
+- `400` invalid transition or status
+- `403` forbidden
+- `404` vendor or auth record not found
+
+---
+
+### PATCH /api/admin/customers/:customerId/status
+
+Update a customer account status.
+
+Permissions:
+- `admin`
+
+Request body:
+```json
+{ "status": "pending|active|suspended" }
+```
+
+Notes:
+- `active` can only be set from `pending` or `suspended`.
+
+Responses:
+- `200` success with status update data
+- `400` invalid transition or status
+- `403` forbidden
+- `404` customer or auth record not found
+
+---
+
+### GET /api/admin/logs
+
+Get all admin logs.
+
+Permissions:
+- `admin`
+
+Query parameters:
+- `page` default `1`
+- `limit` default `10`
+
+Responses:
+- `200` success with pagination and `logs`
+
+---
+
+### GET /api/admin/:id/logs
+
+Get logs for a specific admin by admin document `_id`.
+
+Permissions:
+- `admin`
+
+Query parameters:
+- `page` default `1`
+- `limit` default `10`
+
+Responses:
+- `200` success with pagination and `logs`
+- `400` invalid admin ID
+- `404` admin profile not found
 
 ---
 
@@ -513,18 +706,16 @@ Response:
 
 ### GET /api/locations
 
-Get Egypt location data for governorates, cities, and neighborhoods.
+Get Egypt governorates, cities, and neighborhoods.
 
-Response:
-- array of locations with `results` count
+Responses:
+- `200` success with `{ "results": number, "data": [...] }`
 
 ---
 
 ## Notes for Frontend Integration
 
-- Always include cookies on requests using `credentials: 'include'` or `withCredentials: true`.
-- Auth-protected endpoints return structured JSON with `success`, `data`, or `message`.
-- Vendor-only and admin-only endpoints require the correct authenticated role.
-- For file uploads, use `multipart/form-data` and include the `token` cookie.
-
-If you need examples for a specific frontend framework, ask for an Axios or Fetch version of the request usage.
+- Always include cookies on authenticated requests using `credentials: 'include'` or `withCredentials: true`.
+- Auth-protected endpoints return a normalized JSON body with `success`, `message`, and `data`.
+- Use multipart form data for product image uploads.
+- The `review` field is not consumed by the current order rating endpoint.
