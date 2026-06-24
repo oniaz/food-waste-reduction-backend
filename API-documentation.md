@@ -163,6 +163,46 @@ Responses:
 - `403` forbidden
 - `404` profile not found
 
+Response object shapes:
+- `customerData` contains:
+  - `_id`
+  - `name` (`firstName`, `lastName`)
+  - `address` (`governorate`, `city`, `neighborhood`, `detailedAddress`)
+  - `phoneNumber`
+  - `loyaltyPoints`
+  - `authId`
+  - `username`
+  - `email`
+  - `role`
+  - `accountStatus`
+  - `createdAt`
+  - `updatedAt`
+- `vendorData` contains:
+  - `_id`
+  - `shopName`
+  - `address` (`governorate`, `city`, `neighborhood`, `detailedAddress`, optional `map`)
+  - `phoneNumber`
+  - `taxNumber`
+  - `pickupTime` (`days`, `from`, `to`)
+  - `moneyOwed`
+  - `rating` (`score`, `totalRatingsNumber`)
+  - `authId`
+  - `username`
+  - `email`
+  - `role`
+  - `accountStatus`
+  - `vendorRating`
+  - `createdAt`
+  - `updatedAt`
+- `adminData` contains:
+  - `_id`
+  - `username`
+  - `email`
+  - `role`
+  - `accountStatus`
+  - `createdAt`
+  - `updatedAt`
+
 ---
 
 ### PATCH /api/users/me
@@ -476,9 +516,26 @@ Notes:
 - The backend validates product existence, stock, and vendor active status.
 
 Responses:
-- `201` success with `message` and `order`
+- `201` success with:
+  - `message`
+  - `order` object
 - `400` invalid request, incomplete address, or stock issues
 - `404` product not found
+
+`order` object fields:
+- `_id`
+- `customerId`
+- `products` array of items containing:
+  - `productId` ObjectId or populated product object
+  - `vendorId` ObjectId
+  - `quantity`
+  - `priceAtPurchase`
+  - `isCommissioned`
+- `status`
+- `shippingAddress`
+- `paymentMethod`
+- `createdAt`
+- `updatedAt`
 
 ---
 
@@ -495,7 +552,27 @@ Query parameters:
 - `status` optional filter
 
 Responses:
-- `200` success with `count`, `totalOrders`, `totalPages`, `currentPage`, and `orders`
+- `200` success with:
+  - `count` number
+  - `totalOrders` number
+  - `totalPages` number
+  - `currentPage` number
+  - `orders` array of order objects
+
+Each `order` object typically contains:
+- `_id`
+- `customerId` ObjectId or populated customer object
+- `products` array of items containing:
+  - `productId` ObjectId or populated product object
+  - `vendorId` ObjectId
+  - `quantity`
+  - `priceAtPurchase`
+  - `isCommissioned`
+- `status`
+- `shippingAddress`
+- `paymentMethod`
+- `createdAt`
+- `updatedAt`
 
 ---
 
@@ -512,7 +589,28 @@ Query parameters:
 - `status` optional filter
 
 Responses:
-- `200` success with `orders` and pagination metadata
+- `200` success with:
+  - `success` boolean
+  - `count` number
+  - `totalOrders` number
+  - `totalPages` number
+  - `currentPage` number
+  - `orders` array of order objects
+
+Each `order` object typically contains:
+- `_id`
+- `customerId` ObjectId or populated customer object with `name`, `phoneNumber`, `address`
+- `products` array of items containing:
+  - `productId` ObjectId or populated product object with `productName`, `priceWithCommission`, `category`
+  - `vendorId` ObjectId
+  - `quantity`
+  - `priceAtPurchase`
+  - `isCommissioned`
+- `status`
+- `shippingAddress`
+- `paymentMethod`
+- `createdAt`
+- `updatedAt`
 
 ---
 
@@ -526,10 +624,31 @@ Permissions:
 - `admin`
 
 Responses:
-- `200` success with `order`
+- `200` success with:
+  - `success` boolean
+  - `order` object
 - `400` invalid order ID
 - `403` forbidden
 - `404` order not found
+
+`order` object fields:
+- `_id`
+- `customerId` ObjectId or populated customer object
+- `products` array of items containing:
+  - `productId` ObjectId or populated product object
+  - `vendorId` ObjectId or populated vendor object
+  - `quantity`
+  - `priceAtPurchase`
+  - `isCommissioned`
+- `status`
+- `shippingAddress`
+- `paymentMethod`
+- `summary` object containing:
+  - `totalPriceBeforeDiscount`
+  - `totalDiscount`
+  - `finalPrice`
+- `createdAt`
+- `updatedAt`
 
 ---
 
@@ -541,10 +660,28 @@ Permissions:
 - `customer` owner of the order
 
 Responses:
-- `200` success with updated `order`
+- `200` success with:
+  - `success` boolean
+  - `message` string
+  - `order` object
 - `400` invalid status or order not cancelable
 - `403` forbidden if not owner
 - `404` order not found
+
+`order` object fields:
+- `_id`
+- `customerId`
+- `products` array of items containing:
+  - `productId`
+  - `vendorId`
+  - `quantity`
+  - `priceAtPurchase`
+  - `isCommissioned`
+- `status`
+- `shippingAddress`
+- `paymentMethod`
+- `createdAt`
+- `updatedAt`
 
 ---
 
@@ -568,10 +705,28 @@ Notes:
 - `abandoned` restores product inventory.
 
 Responses:
-- `200` success with updated `order`
+- `200` success with:
+  - `success` boolean
+  - `message` string
+  - `order` object
 - `400` invalid status or immutable order
 - `403` forbidden
 - `404` order not found
+
+`order` object fields:
+- `_id`
+- `customerId`
+- `products` array of items containing:
+  - `productId`
+  - `vendorId`
+  - `quantity`
+  - `priceAtPurchase`
+  - `isCommissioned`
+- `status`
+- `shippingAddress`
+- `paymentMethod`
+- `createdAt`
+- `updatedAt`
 
 ---
 
@@ -594,10 +749,29 @@ Notes:
 - The backend sets `isRated: true` on the order document even though the schema does not define it explicitly.
 
 Responses:
-- `200` success with updated `order`
+- `200` success with:
+  - `success` boolean
+  - `message` string
+  - `order` object
 - `400` invalid rating or order state
 - `403` forbidden if not owner
 - `404` order not found
+
+`order` object fields:
+- `_id`
+- `customerId`
+- `products` array of items containing:
+  - `productId`
+  - `vendorId`
+  - `quantity`
+  - `priceAtPurchase`
+  - `isCommissioned`
+- `status`
+- `shippingAddress`
+- `paymentMethod`
+- `isRated` boolean
+- `createdAt`
+- `updatedAt`
 
 ---
 
