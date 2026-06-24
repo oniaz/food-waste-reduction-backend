@@ -2,6 +2,7 @@ import Products from "../../models/products.model.js";
 import Customers from "../../models/customers.model.js";
 import Vendors from "../../models/vendors.model.js";
 import { geminiModel } from "../../config/gemini.js";
+import { groqClient, GROQ_MODEL } from "../../config/groq.js";
 import { normalizeRecommendationPayload, parseModelJson } from "../../utils/modelJsonParser.js";
 
 const buildCartSignals = (cartItems) => {
@@ -109,6 +110,17 @@ const getFallbackRecommendations = async (cartItems, customerAddress = null) => 
     });
 };
 
+const extractStructuredObject = (parsedData) => {
+  if (!parsedData) return null;
+  if (typeof parsedData === "object" && !Array.isArray(parsedData)) {
+    if (Array.isArray(parsedData.suggestedCategories) || Array.isArray(parsedData.suggestedTags)) return parsedData;
+    const values = Object.values(parsedData);
+    if (values[0] && typeof values[0] === "object" && !Array.isArray(values[0])) return values[0];
+  }
+  if (Array.isArray(parsedData) && (parsedData[0]?.suggestedCategories || parsedData[0]?.suggestedTags)) return parsedData[0];
+  return null;
+};
+
 export const getCartRecommendations = async (cartItems, customerId = null) => {
   if (!cartItems || cartItems.length === 0) return [];
 
@@ -136,10 +148,48 @@ export const getCartRecommendations = async (cartItems, customerId = null) => {
     { "suggestedCategories": ["bakery"], "suggestedTags": ["snack time"] }
   `;
 
+  let recommendations = null;
+
+  // === STRATEGY 1: Gemini Recommendation API ===
   try {
     const result = await geminiModel.generateContent(prompt);
-    const recommendations = normalizeRecommendationPayload(parseModelJson(result.response.text()));
+    const parsedData = parseModelJson(result.response.text());
+    const validObject = extractStructuredObject(parsedData);
+    if (validObject) {
+      recommendations = normalizeRecommendationPayload(validObject);
+      console.log("⚡ SUCCESS: Recommendations generated using GEMINI FLASH");
+    }
+  } catch (error) {
+    console.warn("Gemini Recommendation Error. Falling back to Groq...", error.message);
+  }
 
+  // === STRATEGY 2: Groq Fallback Recommendation API ===
+  if (!recommendations) {
+    try {
+      const result = await groqClient.chat.completions.create({
+        messages: [{ role: "user", content: prompt }],
+        model: GROQ_MODEL,
+        response_format: { type: "json_object" },
+        temperature: 0.2
+      });
+      const parsedData = parseModelJson(result.choices[0].message.content.trim());
+      const validObject = extractStructuredObject(parsedData);
+      if (validObject) {
+        recommendations = normalizeRecommendationPayload(validObject);
+        console.log("🚀 FALLBACK SUCCESS: Recommendations generated using GROQ (Llama 8B)");
+      }
+    } catch (error) {
+      console.error("Groq Recommendation Error. Running local DB fallback processing.", error.message);
+    }
+  }
+
+  // === STRATEGY 3: Local Code Database Pipeline ===
+  if (!recommendations) {
+    console.log("🛡️ GROUND FALLBACK: Running completely offline local scoring algorithm for recommendations");
+    return await getFallbackRecommendations(cartItems, customerAddress);
+  }
+
+  try {
     const customerGov = customerAddress?.governorate || "";
     const customerCity = customerAddress?.city || "";
     const customerNeighbourhood = customerAddress?.neighborhood || "";
@@ -171,7 +221,7 @@ export const getCartRecommendations = async (cartItems, customerId = null) => {
               // Content Matching Points
               { $cond: [{ $setIsSubset: [["$category"], recommendations.suggestedCategories] }, 1, 0] },
               { $cond: [{ $gt: [{ $size: { $setIntersection: ["$tags", recommendations.suggestedTags] } }, 0] }, 2, 0] },
-              
+
               // Location Matching Bonus Weights
               { $cond: [{ $in: [{ $toString: "$vendorId" }, cartVendorIds] }, 5, 0] }, // Same Vendor Bonus
               { $cond: [{ $eq: ["$vendorDetails.address.neighborhood", customerNeighbourhood] }, 3, 0] }, // Same Neighborhood Bonus
@@ -192,7 +242,7 @@ export const getCartRecommendations = async (cartItems, customerId = null) => {
 
     return await getFallbackRecommendations(cartItems, customerAddress);
   } catch (error) {
-    console.error("AI Recommendation Error:", error);
+    console.error("AI Recommendation Aggregation Pipeline Error. Running final fallback processing:", error);
     return await getFallbackRecommendations(cartItems, customerAddress);
   }
 };

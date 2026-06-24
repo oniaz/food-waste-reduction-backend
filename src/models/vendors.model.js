@@ -32,6 +32,10 @@ const vendorsSchema = new mongoose.Schema({
             required: true,
             trim: true,
             maxlength: 200
+        },
+        map: {
+            type: [Number], // [longitude, latitude]
+            default: null
         }
     },
     phoneNumber: {
@@ -44,6 +48,16 @@ const vendorsSchema = new mongoose.Schema({
         required: true,
         unique: true,
         trim: true // Cleans up pasted registration spacing
+    },
+    pickupTime: {
+        type: [
+            {
+                days: { type: [String], required: true },
+                from: { type: String, required: true },
+                to: { type: String, required: true }
+            }
+        ],
+        default: null
     },
     moneyOwed: {
         type: Number,

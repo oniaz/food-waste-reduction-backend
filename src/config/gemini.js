@@ -6,4 +6,12 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const apiKey = process.env.GEMINI_API_KEY;
 const ai = new GoogleGenerativeAI(apiKey);
 
-export const geminiModel = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
+export const geminiModel = ai.getGenerativeModel({
+  model: "gemini-2.5-flash",
+  generationConfig: {
+    thinkingConfig: {
+      thinkingBudget: 0, 
+    },
+    responseMimeType: "application/json"
+  },
+});
