@@ -139,7 +139,7 @@ export const getMyOrders = async (req, res, next) => {
             })
             .populate({
                 path: 'products.vendorId', // Targets vendorId inside the products array
-                select: 'shopName' // Pulls shopName from Vendors schema
+                select: 'shopName address pickupTime' // Pulls shopName from Vendors schema
             });
         // 2. Map through orders to calculate summary pricing totals
         const orders = rawOrders.map(orderDoc => {
@@ -229,7 +229,7 @@ export const getOrderDetails = async (req, res, next) => {
                 select: 'price discount commission',
                 populate: {
                     path: 'vendorId', 
-                    select: 'shopName phoneNumber detailedAddress' 
+                    select: 'shopName phoneNumber address pickupTime' 
                 }
             });
 
