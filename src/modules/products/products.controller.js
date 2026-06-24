@@ -1,6 +1,10 @@
 import * as productService from "./products.service.js";
+import Products from "../../models/products.model.js";
 import * as recommendationService from "./products.recommendation.service.js";
-import { uploadToCloudinary, deleteFromCloudinary } from "../../utils/cloudinaryHelper.js";
+import {
+  uploadToCloudinary,
+  deleteFromCloudinary,
+} from "../../utils/cloudinaryHelper.js";
 import { CATEGORY_CONFIG } from "../../data/productCategories.js";
 import mongoose from "mongoose";
 /**
@@ -93,8 +97,26 @@ export const getById = async (req, res, next) => {
  */
 export const create = async (req, res, next) => {
   try {
+    //user must be authenticated to create a product
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    // check if the user is a customer, if so, deny access
+    if (req.user.role !== "vendor") {
+      return res.status(403).json({
+        success: false,
+        message: "Only vendors can create products",
+      });
+    }
+
+    // Assign the vendorId to the product being created
     req.body.vendorId = req.user.id;
 
+    // Handle image upload if a file is provided
     if (req.file) {
       const uploadResult = await uploadToCloudinary(req.file.buffer);
       req.body.imgUrl = uploadResult.secure_url;
@@ -122,7 +144,21 @@ export const create = async (req, res, next) => {
  */
 export const update = async (req, res, next) => {
   try {
-    const product = await productService.getProductById(req.params.id);
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    // ✅ role check
+    if (req.user.role !== "vendor") {
+      return res.status(403).json({
+        success: false,
+        message: "Only vendors can update products",
+      });
+    }
+    const product = await Products.findById(req.params.id);
 
     if (!product) {
       return res.status(404).json({
@@ -131,14 +167,13 @@ export const update = async (req, res, next) => {
       });
     }
 
-    // ownership check
+    // check if the user is the owner of the product, if not, deny access
     if (product.vendorId.toString() !== req.user.id) {
       return res.status(403).json({
         success: false,
         message: "You are not allowed to update this product",
       });
     }
-
     if (req.file) {
       const uploadResult = await uploadToCloudinary(req.file.buffer);
 
@@ -147,7 +182,6 @@ export const update = async (req, res, next) => {
 
       req.body.imgUrl = uploadResult.secure_url;
       req.body.publicImgId = uploadResult.public_id;
-
     }
 
     const updatedProduct = await productService.updateProduct(
@@ -174,7 +208,21 @@ export const update = async (req, res, next) => {
  */
 export const remove = async (req, res, next) => {
   try {
-    const product = await productService.getProductById(req.params.id);
+    // ✅ auth check
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+    // ✅ role check
+    if (req.user.role !== "vendor") {
+      return res.status(403).json({
+        success: false,
+        message: "Only vendors can delete products",
+      });
+    }
+    const product = await Products.findById(req.params.id);
 
     if (!product) {
       return res.status(404).json({
@@ -183,7 +231,7 @@ export const remove = async (req, res, next) => {
       });
     }
 
-    // ownership check
+    // check if the user is the owner of the product, if not, deny access
     if (product.vendorId.toString() !== req.user.id) {
       return res.status(403).json({
         success: false,
@@ -220,7 +268,10 @@ export const remove = async (req, res, next) => {
 export const recommend = async (req, res, next) => {
   try {
     const { cartItems } = req.body; // Expecting an array from frontend
-    const suggestions = await recommendationService.getCartRecommendations(cartItems, req.user?.id);
+    const suggestions = await recommendationService.getCartRecommendations(
+      cartItems,
+      req.user?.id,
+    );
     if (suggestions.length === 0) {
       return res.status(200).json({
         success: true,
