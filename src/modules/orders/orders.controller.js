@@ -33,10 +33,18 @@ export const createOrder = async (req, res, next) => {
     try {
         // Implementation logic to create an order from cart items
         const customerId = req.user?.id; 
-        const { products, shippingAddress, paymentMethod } = req.body;
+        let { products, shippingAddress, paymentMethod } = req.body;
         // Validate input, calculate total price, and save the order
-        if (!customerId || !products || products.length === 0 ||!Array.isArray(products)|| !shippingAddress || !paymentMethod) {
+        if (!customerId || !products || products.length === 0 ||!Array.isArray(products)) {
             return res.status(400).json({ message: "Missing required fields" });
+        }
+        if (!shippingAddress) {
+            const customer = await Customer.findById(customerId);
+            shippingAddress = customer.address.detailedAddress;
+        }
+
+        if (!paymentMethod) {
+            paymentMethod = "cash_on_delivery";
         }
 
         //must verify price from products collection and calculate total price here before creating order
