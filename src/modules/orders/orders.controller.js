@@ -40,8 +40,16 @@ export const createOrder = async (req, res, next) => {
         }
         if (!shippingAddress) {
             const customer = await Customer.findById(customerId);
-            shippingAddress = customer.address.detailedAddress;
+           const { detailedAddress, neighborhood, city, governorate } = customer.address;
+           if (!detailedAddress || !neighborhood || !city || !governorate) {
+                return res.status(400).json({ 
+                    message: "Your profile address is incomplete. Please provide a full shipping address." 
+                });
+            }
+
+            shippingAddress = `${detailedAddress}, district:${neighborhood}, city: ${city},governorate: ${governorate}`;
         }
+        
 
         if (!paymentMethod) {
             paymentMethod = "cash_on_delivery";
