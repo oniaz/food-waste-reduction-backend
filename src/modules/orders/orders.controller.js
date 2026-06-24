@@ -42,9 +42,15 @@ export const createOrder = async (req, res, next) => {
         //must verify price from products collection and calculate total price here before creating order
         const verifiedProductsList = [];
         for (const item of products) {
-            const product = await Product.findById(item.productId);
+            const product = await Product.findById(item.productId).populate({
+                path: 'vendorId',
+                populate: { path: 'authId' }
+            });
             if (!product) {
                 return res.status(404).json({ message: `Product with ID ${item.productId} not found` });
+            }
+            if (product.vendorId?.authId?.accountStatus !== 'active') {
+                return res.status(400).json({ message: `Product ${product.productName} is currently unavailable because the vendor shop is inactive` });
             }
             if ((item.quantity < 1)|| (item.quantity > product.quantity)) {
                 return res.status(400).json({ message: `Invalid quantity for product ID ${item.productId}` });
@@ -52,7 +58,7 @@ export const createOrder = async (req, res, next) => {
             const finalCustomerPrice = product.price + (product.commission || 0) - (product.discount || 0)*product.price*0.01;
             verifiedProductsList.push({
                 productId: item.productId,
-                vendorId: product.vendorId, //added to match schema edit
+                vendorId: product.vendorId?._id || product.vendorId, //added to match schema edit
                 quantity: item.quantity,
                 priceAtPurchase: parseFloat(Math.max(0, finalCustomerPrice).toFixed(2)),
                 isCommissioned: false 

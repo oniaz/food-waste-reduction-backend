@@ -49,14 +49,12 @@ const vendorsSchema = new mongoose.Schema({
         unique: true,
         trim: true // Cleans up pasted registration spacing
     },
-    pickupTime: {
-        type: [
-            {
-                days: { type: [String], required: true },
-                from: { type: String, required: true },
-                to: { type: String, required: true }
-            }
-        ],
+pickupTime: {
+        type: {
+            days: { type: [String], required: true },
+            from: { type: String, required: true },
+            to: { type: String, required: true }
+        },
         default: null
     },
     moneyOwed: {

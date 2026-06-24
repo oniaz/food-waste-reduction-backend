@@ -33,12 +33,34 @@ export const getCurrentUser = async (req, res, next) => {
     try {
         const currentUserRole = req.user?.role;
         const userId = req.user?.id;
+        const authId = req.user?.authId;
 
         if (!userId) {
             return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
         }
         if (currentUserRole !== 'vendor' && currentUserRole !== 'customer') {
             return res.status(403).json({ message: "Forbidden: Only authorized vendors and customers can access this endpoint" });
+        }
+
+        const userAuth = await UsersAuth.findById(authId || userId).select("-password -resetToken").lean();
+        if (!userAuth) {
+            return res.status(404).json({ message: "Account authentication credentials not found" });
+        }
+
+        // Handle Admin Fetching
+        if (currentUserRole === "admin") {
+            return res.status(200).json({
+                success: true,
+                adminData: {
+                    _id: userAuth._id,
+                    username: userAuth.username,
+                    email: userAuth.email,
+                    role: userAuth.role,
+                    accountStatus: userAuth.accountStatus,
+                    createdAt: userAuth.createdAt,
+                    updatedAt: userAuth.updatedAt
+                }
+            });
         }
 
         // Handle Vendor Fetching
@@ -59,6 +81,10 @@ export const getCurrentUser = async (req, res, next) => {
                 success: true,
                 sellerData: {
                     ...sellerData,
+                    username: userAuth.username,
+                    email: userAuth.email,
+                    role: userAuth.role,
+                    accountStatus: userAuth.accountStatus,
                     vendorRating 
                 }
             });
@@ -73,7 +99,13 @@ export const getCurrentUser = async (req, res, next) => {
             }
             return res.status(200).json({
                 success: true,
-                customerData
+                customerData: {
+                    ...customerData,
+                    username: userAuth.username,
+                    email: userAuth.email,
+                    role: userAuth.role,
+                    accountStatus: userAuth.accountStatus
+                }
             });
         }
         

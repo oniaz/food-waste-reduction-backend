@@ -32,7 +32,7 @@ export const authLimiter = rateLimit({ //apply to login
 
 export const aiCreateLimiter = rateLimit({ //apply to login
     windowMs: 1 * 60 * 1000, // 1 min
-    max: 2, // Only 2 ai requests per minuit
+    max: 4, // Only 4 ai requests per minuit
     keyGenerator: (req, res) => 'global-endpoint-bucket',
     handler: rateLimitHandler("Too many requests. Try again later."),
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers

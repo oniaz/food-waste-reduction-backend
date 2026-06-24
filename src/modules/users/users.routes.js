@@ -2,6 +2,7 @@ import express from "express";
 import {getCurrentUser , updateUserInfo, changePassword,getAllVendors,getAllCustomers, getSellerAnalytics} from "./users.controller.js";
 import authenticate from "../../middleware/authentication.middleware.js" 
 import authorizeRole from "../../middleware/authorization.middleware.js"
+import authorizeStatus from "../../middleware/status.middleware.js";
 
 const router = express.Router();
 
@@ -13,11 +14,11 @@ const router = express.Router();
 
 router.get("/me", authenticate, getCurrentUser);
 
-router.patch("/me", authenticate, updateUserInfo);
+router.patch("/me", authenticate, authorizeStatus("active", "incompleteData"), updateUserInfo);
 
 router.patch("/change-password",authenticate,changePassword)
 
-router.get("/seller-dashboard",authenticate,authorizeRole("vendor"),getSellerAnalytics)
+router.get("/seller-dashboard", authenticate, authorizeRole("vendor"), authorizeStatus("active", "suspended"), getSellerAnalytics)
 router.get("/get-vendors", authenticate,authorizeRole("admin") , getAllVendors);
 router.get("/get-customers", authenticate,authorizeRole("admin"), getAllCustomers);
 
