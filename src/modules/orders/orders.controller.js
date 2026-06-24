@@ -222,7 +222,7 @@ export const getOrderDetails = async (req, res, next) => {
         const orderDoc = await Order.findById(orderId)
             .populate({
                 path: 'customerId',
-                select: 'name phoneNumber' 
+                select: 'name phoneNumber address' 
             })
             .populate({
                 path: 'products.productId', 
@@ -370,7 +370,7 @@ export const getSellerOrders = async (req, res, next) => {
         .limit(limit)
         .populate({
             path: 'customerId',
-            select: 'name phoneNumber'
+            select: 'name phoneNumber address'
         })
         .populate({
             path: 'products.productId',
