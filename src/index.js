@@ -23,6 +23,7 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const isVercel = Boolean(process.env.VERCEL);
 
 // 1. Middleware
 app.use(morgan("dev"));
@@ -64,8 +65,10 @@ app.use("/api/locations", locationsRoutes);
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);
 // 7. Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+if (!isVercel) {
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
 
 export default app;
