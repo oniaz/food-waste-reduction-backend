@@ -49,7 +49,7 @@ export const createOrder = async (req, res, next) => {
             if ((item.quantity < 1)|| (item.quantity > product.quantity)) {
                 return res.status(400).json({ message: `Invalid quantity for product ID ${item.productId}` });
             }
-            const finalCustomerPrice = product.price + (product.commission || 0) - (product.discount || 0);
+            const finalCustomerPrice = product.price + (product.commission || 0) - (product.discount || 0)*product.price*0.01;
             verifiedProductsList.push({
                 productId: item.productId,
                 vendorId: product.vendorId, //added to match schema edit
@@ -103,11 +103,8 @@ export const createOrder = async (req, res, next) => {
  * * @returns {Promise<void>} Sends a JSON response with status 200 containing computed pricing data and orders array.
  * * @throws {401} If the request context is missing user verification data or the customer identity cannot be established.
  */
-export const getMyOrders = async (req, res, next) => {  //mock auth was used for testing
+export const getMyOrders = async (req, res, next) => {  
     try {
-        // Implementation logic to get orders for the logged-in customer
-    
-        
         const customerId = req.user?.id; ////modify this to match auth middleware's user object structure
         if (!customerId) {
             return res.status(401).json({ message: "Unauthorized: Customer ID not found" });
@@ -142,7 +139,7 @@ export const getMyOrders = async (req, res, next) => {  //mock auth was used for
             })
             .populate({
                 path: 'products.vendorId', // Targets vendorId inside the products array
-                select: 'shopName' // Pulls shopName from Vendors schema
+                select: 'shopName address pickupTime' // Pulls shopName from Vendors schema
             });
         // 2. Map through orders to calculate summary pricing totals
         const orders = rawOrders.map(orderDoc => {
@@ -156,7 +153,7 @@ export const getMyOrders = async (req, res, next) => {  //mock auth was used for
                 const quantity = item.quantity || 0;
                 // Fallback to schema values if product document populated successfully
                 const basePrice = (item.productId?.price || item.priceAtPurchase)+(item.productId?.commission); 
-                const itemDiscount = item.productId?.discount || 0; 
+                const itemDiscount = (item.productId?.discount || 0)*(item.productId?.price)*0.01; 
 
                 totalPriceBeforeDiscount += basePrice * quantity;
                 totalDiscount += itemDiscount * quantity;
@@ -225,14 +222,14 @@ export const getOrderDetails = async (req, res, next) => {
         const orderDoc = await Order.findById(orderId)
             .populate({
                 path: 'customerId',
-                select: 'name phoneNumber' 
+                select: 'name phoneNumber address' 
             })
             .populate({
                 path: 'products.productId', 
                 select: 'price discount commission',
                 populate: {
                     path: 'vendorId', 
-                    select: 'shopName phoneNumber detailedAddress' 
+                    select: 'shopName phoneNumber address pickupTime' 
                 }
             });
 
@@ -275,7 +272,7 @@ export const getOrderDetails = async (req, res, next) => {
             const quantity = item.quantity || 0;
             const commission = item.productId?.commission || 0;
             const basePrice = (item.productId?.price || item.priceAtPurchase) + commission; 
-            const itemDiscount = item.productId?.discount || 0; 
+            const itemDiscount = (item.productId?.discount || 0)*(item.productId?.price)*0.01; 
 
             totalPriceBeforeDiscount += basePrice * quantity;
             totalDiscount += itemDiscount * quantity;
@@ -373,7 +370,7 @@ export const getSellerOrders = async (req, res, next) => {
         .limit(limit)
         .populate({
             path: 'customerId',
-            select: 'name phoneNumber'
+            select: 'name phoneNumber address'
         })
         .populate({
             path: 'products.productId',
@@ -471,7 +468,6 @@ export const cancelOrder = async (req, res, next) => {
         next(error);
     } 
 };
-
 // PATCH /orders/:id/status | Auth required (seller owner, admin) | Update order status lifecycle
 /**
  * @api {patch} /api/orders/:id/status Update Order Status
@@ -482,13 +478,14 @@ export const cancelOrder = async (req, res, next) => {
  * This endpoint enforces strict multi-role permission loops and operational validation rules:
  * 1. Restricts caller scope to 'admin' or an involved 'vendor' who owns a product inside the order.
  * 2. Explicitly rejects incoming requests setting status to 'cancelled' (directing clients to use the explicit cancellation route).
- * 3. Enforces an immutability state-lock preventing any status updates if the order is already 'completed' or 'cancelled'.
- * 4. When status is transitioned to 'completed', dynamically increments customer loyalty points and executes an atomic multi-vendor platform commission ledger bulk write.
+ * 3. Enforces an immutability state-lock preventing any status updates if the order is already 'completed', 'cancelled', or 'abandoned'.
+ * 4. When status is transitioned to 'completed', dynamically increments customer loyalty points and updates the vendor debt balance.
+ * 5. When status is transitioned to 'abandoned', inventory stock counts are atomically reverted using a database bulkWrite matrix.
  * @param {import('express').Request} req - Express request object.
  * @param {Object} req.params - URL route parameters.
  * @param {string} req.params.id - The unique MongoDB ObjectId of the target order.
  * @param {Object} req.body - The request body payload.
- * @param {string} req.body.status - The target tracking status string to apply ('pending', 'ready', 'completed').
+ * @param {string} req.body.status - The target tracking status string to apply ('pending', 'ready', 'completed', 'abandoned').
  * @param {Object} req.user - Authenticated user payload injected by auth middleware.
  * @param {string} req.user.id - The unique MongoDB ObjectId of the active actor.
  * @param {string} req.user.role - The authorization system role of the user ('admin' or 'vendor').
@@ -505,7 +502,7 @@ export const updateOrderStatus = async (req, res, next) => {
         const { status } = req.body;
         const currentUserId = req.user?.id;
         const currentUserRole = req.user?.role;
-        const validStatuses = ['ready', 'completed', 'cancelled', 'pending'];
+        const validStatuses = ['ready', 'completed', 'cancelled', 'pending', 'abandoned'];
 
         if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
             return res.status(400).json({ message: "Invalid order ID" });
@@ -513,47 +510,36 @@ export const updateOrderStatus = async (req, res, next) => {
         if (!status || !validStatuses.includes(status)) {
             return res.status(400).json({ message: "Invalid or missing status value" });
         }
-        
         if (status === 'cancelled') {
             return res.status(400).json({ message: "Use the cancel endpoint to cancel orders" });
         }
-        
         if (currentUserRole !== 'admin' && currentUserRole !== 'vendor') {
             return res.status(403).json({ message: "Forbidden: Only admins and vendors can update order status" });
         }
 
-        //OPTIMIZATION: No more deep populating! Just grab the raw order document.
         const order = await Order.findById(orderId);
-
         if (!order) {
             return res.status(404).json({ message: "Order not found" });
         }
         
-        if (order.status === 'cancelled' || order.status === 'completed') {
+        //Add 'abandoned' to the state lock guardrail so finalized orders remain immutable
+        if (['cancelled', 'completed', 'abandoned'].includes(order.status)) {
             return res.status(400).json({ 
                 message: `Cannot update status. This order has already been finalized as '${order.status}'.` 
             });
         }
 
-        // OPTIMIZATION: item.vendorId is now natively in schema, so we check it directly
-        const isSellerInvolved = currentUserRole === 'vendor' && order.products.some(item => { 
+        const isSellerInvolved = currentUserRole === 'admin' || order.products.some(item => { 
             return item.vendorId?.toString() === currentUserId;
         });
 
-        if (currentUserRole === 'vendor' && !isSellerInvolved) {
+        if (!isSellerInvolved) {
             return res.status(403).json({ message: "Forbidden: You can only update status of orders that contain your products" });
         }
-       
-        const updatedOrder = await Order.findByIdAndUpdate(
-            orderId,
-            { $set: { status: status } },
-            { new: true, runValidators: true }
-        );
 
+        // 1. Process Status-Specific Side Effects BEFORE completing the request
         if (status === "completed") {
-         
-            // 1. CUSTOMER LOYALTY POINTS 
-
+            // CUSTOMER LOYALTY POINTS 
             let totalPrice = 0;
             for (let i = 0; i < order.products.length; i++) {
                 totalPrice += order.products[i].priceAtPurchase * order.products[i].quantity;
@@ -566,20 +552,13 @@ export const updateOrderStatus = async (req, res, next) => {
                 });
             }
             
-     
-            // 2. VENDOR COMMISSION  (BULK WRITE)
+            // VENDOR COMMISSION (BULK WRITE)
             const vendorSalesMap = {};
-            
             order.products.forEach(item => {
-                // OPTIMIZATION: Natively reading item.vendorId from your updated schema!
                 const vId = item.vendorId?.toString();
-                
                 if (vId) {
                     const itemTotal = item.priceAtPurchase * item.quantity;
-                    if (!vendorSalesMap[vId]) {
-                        vendorSalesMap[vId] = 0;
-                    }
-                    vendorSalesMap[vId] += itemTotal;
+                    vendorSalesMap[vId] = (vendorSalesMap[vId] || 0) + itemTotal;
                 }
             });
 
@@ -590,11 +569,7 @@ export const updateOrderStatus = async (req, res, next) => {
                 return {
                     updateOne: {
                         filter: { _id: vId }, 
-                        update: {
-                            $inc: {
-                                moneyOwed: platformDebt 
-                            }
-                        }
+                        update: { $inc: { moneyOwed: platformDebt } }
                     }
                 };
             });
@@ -604,9 +579,33 @@ export const updateOrderStatus = async (req, res, next) => {
             }            
         }
 
+        if (status === "abandoned") {
+            // Revert inventory levels cleanly for every item on the order invoice
+            const updateStock = order.products.map(item => ({
+                updateOne: {
+                    filter: { _id: item.productId },
+                    update: { $inc: { quantity: item.quantity } } 
+                }
+            }));
+
+            if (updateStock.length > 0) {
+                await Product.bulkWrite(updateStock); 
+            }
+        }
+
+        // 2. Perform the update step after all logical hooks pass successfully
+        const updatedOrder = await Order.findByIdAndUpdate(
+            orderId,
+            { $set: { status: status } },
+            { new: true, runValidators: true }
+        );
+
+        // 3. Single clean response point serving all statuses consistently
         return res.status(200).json({
             success: true,
-            message: `Order status updated to '${status}' successfully`,
+            message: status === 'abandoned' 
+                ? "Order marked as abandoned and inventory returned successfully" 
+                : `Order status updated to '${status}' successfully`,
             order: updatedOrder
         });
 
