@@ -8,10 +8,10 @@ import UsersAuth from "../../models/usersAuth.model.js";
 import bcrypt from 'bcrypt';
 import Logs from "../../models/adminLogs.model.js"
 import Admin from "../../models/admins.models.js"
-// GET /admin/pending-sellers | Auth required (admin) | list sellers awaiting approval
+// GET /admin/pending-vendors | Auth required (admin) | list vendors awaiting approval
 /**
- * @api {get} /admin/pending-sellers List sellers awaiting approval
- * @apiName GetPendingSellers
+ * @api {get} /admin/pending-vendors List vendors awaiting approval
+ * @apiName GetPendingVendors
  * @apiGroup Admin
  * @apiPermission admin
  * * @description Fetches a paginated list of vendor profiles whose accounts are currently in a 'pending' status.
@@ -33,12 +33,12 @@ import Admin from "../../models/admins.models.js"
  * @returns {number} response.pagination.totalPages - Total calculated pages available.
  * @returns {number} response.pagination.limit - Number of records fetched per page.
  * @returns {number} response.count - The number of vendor records returned on the current page.
- * @returns {Array<Object>} response.pendingSellers - Array of lightweight, lean vendor document profiles.
+ * @returns {Array<Object>} response.pendingVendors - Array of lightweight, lean vendor document profiles.
  * * @throws {Object} 401 - Unauthorized: If the `authId` is missing from the session context.
  * @throws {Object} 403 - Forbidden: If the user making the request does not have an 'admin' role.
  * @throws {Error} Passes any database or internal execution failures to the global error handler via `next(error)`.
  */
-export const getPendingSellers = async (req, res, next) => {
+export const getPendingVendors = async (req, res, next) => {
     try {
         const currentUserRole = req.user?.role;
         const authId = req.user?.authId;
@@ -54,17 +54,17 @@ export const getPendingSellers = async (req, res, next) => {
         const limit = parseInt(req.query.limit, 10) || 10; 
         const skip = (page - 1) * limit;
 
-        const allPendingSellerIds = await UsersAuth.distinct(
+        const allPendingVendorIds = await UsersAuth.distinct(
             "_id", 
             { role: "vendor", accountStatus: "pending" }
         );
 
-        const totalVendors = allPendingSellerIds.length;
+        const totalVendors = allPendingVendorIds.length;
 
         //Slice the IDs array for pagination OR let the second query handle skip/limit
-        const paginatedIds = allPendingSellerIds.slice(skip, skip + limit);
+        const paginatedIds = allPendingVendorIds.slice(skip, skip + limit);
 
-        const pendingSellers = await Vendor.find({ 
+        const pendingVendors = await Vendor.find({ 
             authId: { $in: paginatedIds } 
         }).lean(); // .lean() makes this dashboard query much faster
 
@@ -76,8 +76,8 @@ export const getPendingSellers = async (req, res, next) => {
                 totalPages: Math.ceil(totalVendors / limit),
                 limit
             },
-            count: pendingSellers.length, // Shows how many are on THIS page
-            pendingSellers 
+            count: pendingVendors.length, // Shows how many are on THIS page
+            pendingVendors 
         });
         
     } catch (error) {
@@ -86,10 +86,10 @@ export const getPendingSellers = async (req, res, next) => {
     }
 };
 
-// PATCH /admin/sellers/:sellerId/status | Auth required (admin) | approve or reject seller account
+// PATCH /admin/vendors/:vendorId/status | Auth required (admin) | approve or reject vendor account
 /**
- * @api {patch} /admin/sellers/:sellerId/status Approve, reject, or suspend a seller account
- * @apiName ChangeSellerStatus
+ * @api {patch} /admin/vendors/:vendorId/status Approve, reject, or suspend a vendor account
+ * @apiName ChangeVendorStatus
  * @apiGroup Admin
  * @apiPermission admin
  * * @description Updates a vendor's authentication account status (`pending`, `incompleteData`, `active`, or `suspended`) 
@@ -99,9 +99,9 @@ export const getPendingSellers = async (req, res, next) => {
  * @param {string} req.user.authId - The `UsersAuth` ID of the issuing admin.
  * @param {string} req.user.role - The security role of the current user (must be 'admin').
  * @param {Object} req.params - URL route parameters.
- * @param {string} req.params.sellerId - The 24-character hexadecimal Mongoose ObjectId of the target Vendor profile.
+ * @param {string} req.params.vendorId - The 24-character hexadecimal Mongoose ObjectId of the target Vendor profile.
  * @param {Object} req.body - JSON payload data.
- * @param {"pending"|"incompleteData"|"active"|"suspended"} req.body.status - The target status to transition the seller account into.
+ * @param {"pending"|"incompleteData"|"active"|"suspended"} req.body.status - The target status to transition the vendor account into.
  * @param {Object} res - Express response object.
  * @param {Function} next - Express next middleware function for error handling pipelines.
  * * @returns {Object} 200 - Success response containing updated account visibility parameters.
@@ -113,14 +113,14 @@ export const getPendingSellers = async (req, res, next) => {
  * @returns {string} response.data.newStatus - The definitive live state value matching the update.
  * * @throws {Object} 401 - Unauthorized: If the active middleware state cannot verify a valid `authId`.
  * @throws {Object} 403 - Forbidden: Passed if user credentials possess standard consumer or base vendor access layers.
- * @throws {Object} 400 - Bad Request: Emitted for malformed `sellerId` fields, illegal state request formats, or identity logic redundancy (e.g. state updating to itself) or unauthorized state paths (e.g. going straight to active from pending).
+ * @throws {Object} 400 - Bad Request: Emitted for malformed `vendorId` fields, illegal state request formats, or identity logic redundancy (e.g. state updating to itself) or unauthorized state paths (e.g. going straight to active from pending).
  * @throws {Object} 404 - Not Found: Triggered if matching database profiles for the targeted Vendor profile, Admin profile context, or Core Authentication mapping values cannot be fetched.
  */
-export const changeSellerStatus = async (req, res, next) => {
+export const changeVendorStatus = async (req, res, next) => {
     try {
         const currentUserRole = req.user?.role;
         const authId = req.user?.authId; // This is the UsersAuth ID
-        const { sellerId } = req.params; 
+        const { vendorId } = req.params; 
         const { status } = req.body;
         const validStatuses = ['pending', 'incompleteData', 'active', 'suspended'];
 
@@ -131,8 +131,8 @@ export const changeSellerStatus = async (req, res, next) => {
             return res.status(403).json({ message: "Forbidden: Unauthorized access" });
         }
 
-        if (!sellerId || !mongoose.Types.ObjectId.isValid(sellerId)) {
-            return res.status(400).json({ message: "Invalid seller ID format" });
+        if (!vendorId || !mongoose.Types.ObjectId.isValid(vendorId)) {
+            return res.status(400).json({ message: "Invalid vendor ID format" });
         }
         if (!status || !validStatuses.includes(status)) {
             return res.status(400).json({ message: "Invalid or missing status value" });
@@ -143,7 +143,7 @@ export const changeSellerStatus = async (req, res, next) => {
             return res.status(404).json({ message: "Admin profile record not found" });
         }
 
-        const vendorProfile = await Vendor.findById(sellerId);
+        const vendorProfile = await Vendor.findById(vendorId);
         if (!vendorProfile) {
             return res.status(404).json({ message: "Vendor profile not found" });
         }
@@ -156,7 +156,7 @@ export const changeSellerStatus = async (req, res, next) => {
         const previousStatus = currentAuth.accountStatus;
 
         if (previousStatus === status) {
-            return res.status(400).json({ message: `Seller account is already ${status}` });
+            return res.status(400).json({ message: `Vendor account is already ${status}` });
         }
 
         // update
@@ -193,12 +193,12 @@ export const changeSellerStatus = async (req, res, next) => {
             adminId: adminProfile._id, // Now referencing the real '_id' from the Admin collection
             userId: vendorProfile.authId, // Targets 'UsersAuth' of the vendor being updated
             action: logAction,
-            description: `Changed seller with Id ${sellerId} status from '${previousStatus}' to '${status}'.`
+            description: `Changed vendor with Id ${vendorId} status from '${previousStatus}' to '${status}'.`
         })
 
         return res.status(200).json({
             success: true,
-            message: `Seller account status successfully updated to ${status}`,
+            message: `Vendor account status successfully updated to ${status}`,
             data: {
                 vendorId: vendorProfile._id,
                 authId: updatedAuth._id,

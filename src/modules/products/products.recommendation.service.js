@@ -81,7 +81,7 @@ const getFallbackRecommendations = async (cartItems, customerAddress = null) => 
 
       // 2. Add Location weight logic to fallback
       if (vendor) {
-        if (vendorIds.has(vendor._id?.toString())) score += 5; // Same seller
+        if (vendorIds.has(vendor._id?.toString())) score += 5; // Same vendor
 
         if (customerAddress) {
           if (vendor.address?.neighborhood === customerNeighbourhood) {

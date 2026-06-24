@@ -1,8 +1,8 @@
 // GET /products | Public | get all active and non-expired products with filter
 // GET /products/:id | Public | get single product by id
-// POST /products | Auth required (seller) | create product listing with image upload
-// PUT /products/:id | Auth required (seller owner, admin optional) | update product details
-// DELETE /products/:id | Auth required (seller owner, admin) | delete product
+// POST /products | Auth required (vendor) | create product listing with image upload
+// PUT /products/:id | Auth required (vendor owner, admin optional) | update product details
+// DELETE /products/:id | Auth required (vendor owner, admin) | delete product
 // GET /products/search?q= | Public | search products
 // POST /products/recommendation | Auth required (customer) | AI-based product recommendations
 

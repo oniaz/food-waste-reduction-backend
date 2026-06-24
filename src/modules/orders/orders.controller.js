@@ -208,7 +208,7 @@ export const getMyOrders = async (req, res, next) => {
     }
 };
 
-// GET /orders/:id | Auth required (customer owner, seller involved, admin) | get order details 
+// GET /orders/:id | Auth required (customer owner, vendor involved, admin) | get order details 
 //one end point used for all three roles with guardrails in controller
 /**
  * @api {get} /api/orders/:id Get Order Details
@@ -267,7 +267,7 @@ export const getOrderDetails = async (req, res, next) => {
         const orderCustomerStrId = orderDoc.customerId?._id ? orderDoc.customerId._id.toString() : orderDoc.customerId?.toString();
         const isCustomerOwner = currentUserRole === 'customer' && orderCustomerStrId === currentUserId;
 
-        const isSellerInvolved = currentUserRole === 'vendor' && orderDoc.products.some(item => { 
+        const isVendorInvolved = currentUserRole === 'vendor' && orderDoc.products.some(item => { 
             const vendorRef = item.productId?.vendorId;
             if (!vendorRef) return false; 
 
@@ -278,7 +278,7 @@ export const getOrderDetails = async (req, res, next) => {
             return vendorStrId === currentUserId;
         });
 
-        if (!isAdmin && !isCustomerOwner && !isSellerInvolved) {
+        if (!isAdmin && !isCustomerOwner && !isVendorInvolved) {
             return res.status(403).json({ 
                 success: false,
                 message: "Forbidden: You do not have permission to view this order" 
@@ -319,18 +319,18 @@ export const getOrderDetails = async (req, res, next) => {
         next(error);
     }
 };
-// GET /orders/seller | Auth required (seller) | get all orders containing seller products
+// GET /orders/vendor | Auth required (vendor) | get all orders containing vendor products
 /**
- * @api {get} /api/orders/seller Get Seller Orders
- * @apiName GetSellerOrders
+ * @api {get} /api/orders/vendor Get Vendor Orders
+ * @apiName GetVendorOrders
  * @apiGroup Orders
  * @apiPermission vendor
  * * @description Retrieves a chronological list of customer orders containing products owned by the
  * currently authenticated vendor, with optional filtering by order status. It filters the product array
- * to expose only items belonging to the requesting seller and computes a seller-specific financial summary.
+ * to expose only items belonging to the requesting vendor and computes a vendor-specific financial summary.
  * * @param {import('express').Request} req - Express request object.
  * @param {Object} req.user - Authenticated user payload injected by auth middleware.
- * @param {string} req.user.id - The unique MongoDB ObjectId of the vendor/seller.
+ * @param {string} req.user.id - The unique MongoDB ObjectId of the vendor/vendor.
  * @param {string} req.user.role - The authorization system role of the user (must be 'vendor').
  * @param {Object} req.query - URL query parameters.
  * @param {string} [req.query.page=1] - Optional target page for pagination results.
@@ -342,26 +342,26 @@ export const getOrderDetails = async (req, res, next) => {
  * * @throws {401} If the request context is missing authentication identifiers.
  * @throws {403} If the requester's system role is not explicitly verified as a 'vendor'.
  */
-export const getSellerOrders = async (req, res, next) => {
+export const getVendorOrders = async (req, res, next) => {
     try {
-        const sellerId = req.user?.id;
+        const vendorId = req.user?.id;
         const currentUserRole = req.user?.role;
         //check if user is a vendor
         if (currentUserRole !== 'vendor') {
             return res.status(403).json({ message: "Forbidden: Only vendors can access this endpoint" });
         }
-        // Validate seller ID presence
-        if (!sellerId) {
-            return res.status(401).json({ message: "Unauthorized: Seller ID not found" });
+        // Validate vendor ID presence
+        if (!vendorId) {
+            return res.status(401).json({ message: "Unauthorized: Vendor ID not found" });
         }
 
         const page = parseInt(req.query.page, 10) || 1;   // Default to page 1
         const limit = parseInt(req.query.limit, 10) || 10; // Default to 10 items per page
         const skip = (page - 1) * limit;
 
-        const sellerProductIds = await Product.distinct('_id', { vendorId: sellerId }); // Get array of all product IDs that belong to this seller , distinct is used to optimize the query by only returning unique product IDs instead of full product documents
+        const vendorProductIds = await Product.distinct('_id', { vendorId: vendorId }); // Get array of all product IDs that belong to this vendor , distinct is used to optimize the query by only returning unique product IDs instead of full product documents
 
-        if (sellerProductIds.length === 0) { //if no products, then no orders can contain seller products
+        if (vendorProductIds.length === 0) { //if no products, then no orders can contain vendor products
                 return res.status(200).json({ 
                 success: true, 
                 count: 0, 
@@ -371,7 +371,7 @@ export const getSellerOrders = async (req, res, next) => {
             });
         }
         const queryFilter = { 
-            "products.productId": { $in: sellerProductIds } 
+            "products.productId": { $in: vendorProductIds } 
         };
         
         const incomingStatus = req.query.status;
@@ -490,7 +490,7 @@ export const cancelOrder = async (req, res, next) => {
         next(error);
     } 
 };
-// PATCH /orders/:id/status | Auth required (seller owner, admin) | Update order status lifecycle
+// PATCH /orders/:id/status | Auth required (vendor owner, admin) | Update order status lifecycle
 /**
  * @api {patch} /api/orders/:id/status Update Order Status
  * @apiName UpdateOrderStatus
@@ -551,11 +551,11 @@ export const updateOrderStatus = async (req, res, next) => {
             });
         }
 
-        const isSellerInvolved = currentUserRole === 'admin' || order.products.some(item => { 
+        const isVendorInvolved = currentUserRole === 'admin' || order.products.some(item => { 
             return item.vendorId?.toString() === currentUserId;
         });
 
-        if (!isSellerInvolved) {
+        if (!isVendorInvolved) {
             return res.status(403).json({ message: "Forbidden: You can only update status of orders that contain your products" });
         }
 
@@ -635,7 +635,7 @@ export const updateOrderStatus = async (req, res, next) => {
         next(error);
     }
 };
-// POST /orders/:id/rate | Auth required (customer owner) | rate completed order and update seller rating
+// POST /orders/:id/rate | Auth required (customer owner) | rate completed order and update vendor rating
 /**
  * @api {post} /api/orders/:id/rate Rate Order
  * @apiName RateOrder

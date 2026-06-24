@@ -12,7 +12,7 @@ const orderSchema = new mongoose.Schema({
             ref: 'Products', // Targets your exported Products model name
             required: true
         },
-        vendorId: {  //added for better seller analytics
+        vendorId: {  //added for better vendor analytics
             type: mongoose.Schema.Types.ObjectId, 
             ref: 'Vendors',
             required: true },

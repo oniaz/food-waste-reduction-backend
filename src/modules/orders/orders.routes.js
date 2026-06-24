@@ -1,5 +1,5 @@
 import express from "express";
-import { createOrder , getMyOrders , getOrderDetails , getSellerOrders, cancelOrder, updateOrderStatus , rateOrder} from "./orders.controller.js";
+import { createOrder , getMyOrders , getOrderDetails , getVendorOrders, cancelOrder, updateOrderStatus , rateOrder} from "./orders.controller.js";
 import authenticate from "../../middleware/authentication.middleware.js" 
 import authorizeRole from "../../middleware/authorization.middleware.js"
 import authorizeStatus from "../../middleware/status.middleware.js";
@@ -7,11 +7,11 @@ const router = express.Router();
 
 // POST /orders | Auth required (customer) | create order from cart items
 // GET /orders/my-orders | Auth required (customer) | get logged-in customer orders
-// GET /orders/:id | Auth required (customer owner, seller involved, admin) | get order details
-// GET /orders/seller | Auth required (seller) | get all orders containing seller products
+// GET /orders/:id | Auth required (customer owner, vendor involved, admin) | get order details
+// GET /orders/vendor | Auth required (vendor) | get all orders containing vendor products
 // PATCH /orders/:id/cancel | Auth required (customer owner) | cancel pending order
-// PATCH /orders/:id/status | Auth required (seller owner, admin) | update order status lifecycle
-// POST /orders/:id/rate | Auth required (customer owner) | rate completed order and update seller rating
+// PATCH /orders/:id/status | Auth required (vendor owner, admin) | update order status lifecycle
+// POST /orders/:id/rate | Auth required (customer owner) | rate completed order and update vendor rating
 
 
 //////TEMPORARY MOCK AUTH MIDDLEWARE JUST FOR TESTING////////////////
@@ -32,7 +32,7 @@ router.post("/", authenticate, authorizeRole("customer"), authorizeStatus("activ
 
 router.get("/my-orders", authenticate, authorizeRole("customer"), authorizeStatus("active", "suspended"), getMyOrders);
 
-router.get("/seller", authenticate, authorizeRole("vendor"), authorizeStatus("active", "suspended"), getSellerOrders); //must be defined before the more general /:id route to avoid route conflicts
+router.get("/vendor", authenticate, authorizeRole("vendor"), authorizeStatus("active", "suspended"), getVendorOrders); //must be defined before the more general /:id route to avoid route conflicts
 
 router.get("/:id", authenticate, authorizeRole("vendor", "customer", "admin"),  authorizeStatus("active", "suspended"), getOrderDetails);
 

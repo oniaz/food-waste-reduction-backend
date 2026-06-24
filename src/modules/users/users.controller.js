@@ -24,7 +24,7 @@ import { validateName, validateShopName, validatePhoneNumber, validateAddress, v
  * @param {string} req.user.role - The system access tier role of the user ('customer' or 'vendor').
  * @param {import('express').Response} res - Express response object used to return JSON payloads.
  * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
- * @returns {Promise<void>} Sends a JSON response with status 200 containing either 'sellerData' or 'customerData'.
+ * @returns {Promise<void>} Sends a JSON response with status 200 containing either 'vendorData' or 'customerData'.
  * @throws {401} If the user payload session data cannot be parsed or verified by authentication guards.
  * @throws {403} If the parsed user role does not have authorization clearance to hit the endpoint.
  * @throws {404} If the underlying model document corresponding to the user ID is missing from the database.
@@ -66,21 +66,21 @@ export const getCurrentUser = async (req, res, next) => {
         // Handle Vendor Fetching
         if (currentUserRole === "vendor") {
             
-            const sellerData = await Vendor.findById(userId).lean(); // .lean() allows us to freely modify and spread the object safely
+            const vendorData = await Vendor.findById(userId).lean(); // .lean() allows us to freely modify and spread the object safely
             
-            if (!sellerData) {
+            if (!vendorData) {
                 return res.status(404).json({ message: "Vendor profile not found" });
             }
 
             // Calculate rating, protecting against division by zero (0 total ratings)
-            const totalRatings = sellerData.rating?.totalRatingsNumber || 0;
-            const score = sellerData.rating?.score || 0;
+            const totalRatings = vendorData.rating?.totalRatingsNumber || 0;
+            const score = vendorData.rating?.score || 0;
             const vendorRating = totalRatings > 0 ? (score / totalRatings) : 0;
 
             return res.status(200).json({
                 success: true,
-                sellerData: {
-                    ...sellerData,
+                vendorData: {
+                    ...vendorData,
                     username: userAuth.username,
                     email: userAuth.email,
                     role: userAuth.role,
@@ -219,7 +219,7 @@ export const updateUserInfo = async (req, res, next) => {
             return res.status(200).json({
                 success: true,
                 message: "Vendor profile updated successfully",
-                sellerData: updatedUser
+                vendorData: updatedUser
             });
         }
 
@@ -464,10 +464,10 @@ export const getAllCustomers = async (req, res, next) => {
         next(error);
     }
 };
-// GET /users/seller-dashboard | Auth required (seller) | get seller analytics summary
+// GET /users/vendor-dashboard | Auth required (vendor) | get vendor analytics summary
 /**
- * @api {get} /api/users/seller-dashboard Get Seller Analytics Summary
- * @apiName GetSellerAnalytics
+ * @api {get} /api/users/vendor-dashboard Get Vendor Analytics Summary
+ * @apiName GetVendorAnalytics
  * @apiGroup Users
  * @apiPermission vendor
  * @description Compiles an analytical performance dashboard metric snapshot for the authenticated vendor.
@@ -487,7 +487,7 @@ export const getAllCustomers = async (req, res, next) => {
  * @throws {401} If identity profile context links are absent from the session middleware payload.
  * @throws {403} If the incoming actor's permission profile role is anything other than 'vendor'.
  */
-export const getSellerAnalytics = async (req, res, next) => {
+export const getVendorAnalytics = async (req, res, next) => {
     try {
         const currentUserRole = req.user?.role;
         const userId = req.user?.id; 
