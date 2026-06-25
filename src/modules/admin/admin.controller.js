@@ -1,13 +1,11 @@
-import Order from "../../models/orders.model.js";
-import Product from "../../models/products.model.js";
-import Customer from "../../models/customers.model.js";
-import Vendor from "../../models/vendors.model.js";
-import express from "express";
-import mongoose from "mongoose";
-import UsersAuth from "../../models/usersAuth.model.js";
-import bcrypt from 'bcrypt';
-import Logs from "../../models/adminLogs.model.js"
-import Admin from "../../models/admins.models.js"
+import {
+    getPendingVendorsList,
+    updateVendorStatus,
+    updateCustomerStatus,
+    getAllAdminLogs,
+    getLogsByAdmin,
+} from "./admin.service.js";
+
 // GET /admin/pending-vendors | Auth required (admin) | list vendors awaiting approval
 /**
  * @api {get} /admin/pending-vendors List vendors awaiting approval
@@ -52,21 +50,8 @@ export const getPendingVendors = async (req, res, next) => {
 
         const page = parseInt(req.query.page, 10) || 1;   
         const limit = parseInt(req.query.limit, 10) || 10; 
-        const skip = (page - 1) * limit;
 
-        const allPendingVendorIds = await UsersAuth.distinct(
-            "_id", 
-            { role: "vendor", accountStatus: "pending" }
-        );
-
-        const totalVendors = allPendingVendorIds.length;
-
-        //Slice the IDs array for pagination OR let the second query handle skip/limit
-        const paginatedIds = allPendingVendorIds.slice(skip, skip + limit);
-
-        const pendingVendors = await Vendor.find({ 
-            authId: { $in: paginatedIds } 
-        }).lean(); // .lean() makes this dashboard query much faster
+        const { pendingVendors, totalVendors } = await getPendingVendorsList(page, limit);
 
         return res.status(200).json({ 
             success: true, 
@@ -122,7 +107,6 @@ export const changeVendorStatus = async (req, res, next) => {
         const authId = req.user?.authId; // This is the UsersAuth ID
         const { vendorId } = req.params; 
         const { status } = req.body;
-        const validStatuses = ['pending', 'incompleteData', 'active', 'suspended'];
 
         if (!authId) {
             return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
@@ -131,79 +115,16 @@ export const changeVendorStatus = async (req, res, next) => {
             return res.status(403).json({ message: "Forbidden: Unauthorized access" });
         }
 
-        if (!vendorId || !mongoose.Types.ObjectId.isValid(vendorId)) {
-            return res.status(400).json({ message: "Invalid vendor ID format" });
-        }
-        if (!status || !validStatuses.includes(status)) {
-            return res.status(400).json({ message: "Invalid or missing status value" });
-        }
+        const result = await updateVendorStatus(authId, vendorId, status);
 
-        const adminProfile = await Admin.findOne({ authId });
-        if (!adminProfile) {
-            return res.status(404).json({ message: "Admin profile record not found" });
+        if (result.error) {
+            return res.status(result.status).json({ message: result.error });
         }
-
-        const vendorProfile = await Vendor.findById(vendorId);
-        if (!vendorProfile) {
-            return res.status(404).json({ message: "Vendor profile not found" });
-        }
-
-        // get current account status before overwrite 
-        const currentAuth = await UsersAuth.findById(vendorProfile.authId);
-        if (!currentAuth) {
-            return res.status(404).json({ message: "Associated authentication account not found" });
-        }
-        const previousStatus = currentAuth.accountStatus;
-
-        if (previousStatus === status) {
-            return res.status(400).json({ message: `Vendor account is already ${status}` });
-        }
-
-        // update
-        const updatedAuth = await UsersAuth.findByIdAndUpdate(
-            vendorProfile.authId,
-            { accountStatus: status },
-            { returnDocument: 'after', runValidators: true }
-        );
-
-        //Maping the action string to match your exact schema enum values
-        let logAction;
-        if (status === 'incompleteData') {
-            logAction = 'approve_vendor';
-        } else if (status === 'active') {
-            if (previousStatus === 'suspended') {
-                logAction = 'reactivate_user';
-            } else {
-                return res.status(400).json({
-                    message: "Bad Request: Accounts can only be manually set to active from a suspended state."
-                });
-            }
-        } else if (status === 'suspended') {
-            if (previousStatus === 'pending') {
-                logAction = 'reject_vendor';
-            } else if (previousStatus === 'active' || previousStatus === 'incompleteData') {
-                logAction = 'suspend_user'; 
-            }
-        } else if (status === 'pending') {
-            logAction = 'suspend_user'; 
-        }
-
-        // Create the system log 
-        Logs.create({
-            adminId: adminProfile._id, // Now referencing the real '_id' from the Admin collection
-            userId: vendorProfile.authId, // Targets 'UsersAuth' of the vendor being updated
-            action: logAction,
-            description: `Changed vendor with Id ${vendorId} status from '${previousStatus}' to '${status}'.`
-        })
 
         return res.status(200).json({
             success: true,
-            message: `Vendor account status successfully updated to ${status}`,
-            data: {
-                vendorId: vendorProfile._id,
-                authId: updatedAuth._id,
-                newStatus: updatedAuth.accountStatus
-            }
+            message: result.message,
+            data: result.data
         });
         
     } catch (error) {
@@ -211,6 +132,7 @@ export const changeVendorStatus = async (req, res, next) => {
         next(error);
     }
 };
+
 // GET /admin/logs | Auth required (admin) | get all system admin logs
 /**
  * @api {get} /admin/logs Get all system admin logs
@@ -256,17 +178,9 @@ export const getAllLogs = async (req, res, next) => {
 
         const page = parseInt(req.query.page, 10) || 1;   
         const limit = parseInt(req.query.limit, 10) || 10; 
-        const skip = (page - 1) * limit;
 
-        const totalLogs = await Logs.countDocuments(); 
+        const { logs, totalLogs } = await getAllAdminLogs(page, limit);
 
-        const logs = await Logs.find()
-            .sort({ createdAt: -1 }) // -1 sorts descending (newest first)
-            .skip(skip)
-            .limit(limit)
-            .lean(); // Converts Mongoose docs to lightweight JSON objects
-
-    
         return res.status(200).json({
             success: true,
             pagination: {
@@ -283,6 +197,7 @@ export const getAllLogs = async (req, res, next) => {
         next(error); 
     }
 };
+
 // GET /admin/:id/logs | Auth required (admin) | get logs for specific admin user 
 /**
  * @api {get} /admin/:id/logs Get logs for a specific admin user
@@ -330,27 +245,17 @@ export const getAdminLogs = async (req, res, next) => {
         if (currentUserRole !== 'admin') {
             return res.status(403).json({ message: "Forbidden: Unauthorized access" });
         }
-        if (!mongoose.Types.ObjectId.isValid(targetAdminAuthId)) {
-            return res.status(400).json({ message: "Invalid Admin ID format" });
-        }
-
-        const adminProfile = await Admin.findById(targetAdminAuthId); //check admin exists
-        if (!adminProfile) {
-            return res.status(404).json({ message: "Admin profile not found" });
-        }
 
         const page = parseInt(req.query.page, 10) || 1;   
         const limit = parseInt(req.query.limit, 10) || 10; 
-        const skip = (page - 1) * limit;
 
-        const logQuery = { adminId: adminProfile._id };
-        const totalLogs = await Logs.countDocuments(logQuery); 
+        const result = await getLogsByAdmin(targetAdminAuthId, page, limit);
 
-        const logs = await Logs.find(logQuery)
-            .sort({ createdAt: -1 }) 
-            .skip(skip)
-            .limit(limit)
-            .lean(); 
+        if (result.error) {
+            return res.status(result.status).json({ message: result.error });
+        }
+
+        const { logs, totalLogs } = result;
 
         return res.status(200).json({
             success: true,
@@ -406,7 +311,6 @@ export const changeCustomerStatus = async (req, res, next) => { //suspend and ac
         const authId = req.user?.authId; // This is the UsersAuth ID
         const { customerId } = req.params; 
         const { status } = req.body;
-        const validStatuses = ['pending', 'active', 'suspended'];
 
         if (!authId) {
             return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
@@ -415,73 +319,16 @@ export const changeCustomerStatus = async (req, res, next) => { //suspend and ac
             return res.status(403).json({ message: "Forbidden: Unauthorized access" });
         }
 
-        if (!customerId || !mongoose.Types.ObjectId.isValid(customerId)) {
-            return res.status(400).json({ message: "Invalid customer ID format" });
-        }
-        if (!status || !validStatuses.includes(status)) {
-            return res.status(400).json({ message: "Invalid or missing status value" });
-        }
+        const result = await updateCustomerStatus(authId, customerId, status);
 
-        const adminProfile = await Admin.findOne({ authId });
-        if (!adminProfile) {
-            return res.status(404).json({ message: "Admin profile record not found" });
+        if (result.error) {
+            return res.status(result.status).json({ message: result.error });
         }
-
-        const customerProfile = await Customer.findById(customerId);
-        if (!customerProfile) {
-            return res.status(404).json({ message: "Customer profile not found" });
-        }
-
-        const currentAuth = await UsersAuth.findById(customerProfile.authId);
-        if (!currentAuth) {
-            return res.status(404).json({ message: "Associated authentication account not found" });
-        }
-        const previousStatus = currentAuth.accountStatus;
-
-        if (previousStatus === status) {
-            return res.status(400).json({ message: `Customer account is already ${status}` });
-        }
-
-        let logAction;
-        if (status === 'active') {
-            if (previousStatus === 'suspended') {
-                logAction = 'reactivate_user';
-            } else if (previousStatus === 'pending') {
-                logAction = 'reactivate_user'; // Custom action tag for clean audit sorting
-            } else {
-                return res.status(400).json({
-                    message: "Bad Request: Customer accounts can only be set to active from a pending or suspended state."
-                });
-            }
-        } else if (status === 'suspended') {
-            logAction = 'suspend_user'; 
-        } else if (status === 'pending') {
-            logAction = 'suspend_user'; 
-        }
-
-        // Perform the write update operation
-        const updatedAuth = await UsersAuth.findByIdAndUpdate(
-            customerProfile.authId,
-            { accountStatus: status },
-            { returnDocument: 'after', runValidators: true }
-        );
-
-        // Create the system log 
-        await Logs.create({
-            adminId: adminProfile._id, 
-            userId: customerProfile.authId, // Targets 'UsersAuth' of the customer being updated
-            action: logAction,
-            description: `Changed customer with Id ${customerId} status from '${previousStatus}' to '${status}'.`
-        });
 
         return res.status(200).json({
             success: true,
-            message: `Customer account status successfully updated to ${status}`,
-            data: {
-                customerId: customerProfile._id,
-                authId: updatedAuth._id,
-                newStatus: updatedAuth.accountStatus
-            }
+            message: result.message,
+            data: result.data
         });
         
     } catch (error) {

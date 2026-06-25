@@ -1,12 +1,15 @@
-import Order from "../../models/orders.model.js";
-import Product from "../../models/products.model.js";
-import Customer from "../../models/customers.model.js";
-import Vendor from "../../models/vendors.model.js";
-import express from "express";
-import mongoose from "mongoose";
-import UsersAuth from "../../models/usersAuth.model.js";
-import bcrypt from 'bcrypt';
 import { validateName, validateShopName, validatePhoneNumber, validateAddress, validatePickupTime, validateMapCoordinates } from "../../utils/userDataValidators.js";
+import {
+    getAuthRecord,
+    getVendorProfile,
+    getCustomerProfile,
+    updateVendorProfile,
+    updateCustomerProfile,
+    changeUserPassword,
+    computeVendorAnalytics,
+    getPaginatedVendors,
+    getPaginatedCustomers,
+} from "./users.service.js";
 
 // GET /users/me | Auth required (all roles) | get current user profile with role data
 /**
@@ -42,7 +45,7 @@ export const getCurrentUser = async (req, res, next) => {
             return res.status(403).json({ message: "Forbidden: Only authorized vendors and customers can access this endpoint" });
         }
 
-        const userAuth = await UsersAuth.findById(authId || userId).select("-password -resetToken").lean();
+        const userAuth = await getAuthRecord(authId || userId);
         if (!userAuth) {
             return res.status(404).json({ message: "Account authentication credentials not found" });
         }
@@ -65,17 +68,11 @@ export const getCurrentUser = async (req, res, next) => {
 
         // Handle Vendor Fetching
         if (currentUserRole === "vendor") {
-            
-            const vendorData = await Vendor.findById(userId).lean(); // .lean() allows us to freely modify and spread the object safely
+            const vendorData = await getVendorProfile(userId);
             
             if (!vendorData) {
                 return res.status(404).json({ message: "Vendor profile not found" });
             }
-
-            // Calculate rating, protecting against division by zero (0 total ratings)
-            const totalRatings = vendorData.rating?.totalRatingsNumber || 0;
-            const score = vendorData.rating?.score || 0;
-            const vendorRating = totalRatings > 0 ? (score / totalRatings) : 0;
 
             return res.status(200).json({
                 success: true,
@@ -85,14 +82,13 @@ export const getCurrentUser = async (req, res, next) => {
                     email: userAuth.email,
                     role: userAuth.role,
                     accountStatus: userAuth.accountStatus,
-                    vendorRating 
                 }
             });
         }
 
         // Handle Customer 
         if (currentUserRole === "customer") {
-            const customerData = await Customer.findById(userId).lean(); // Added .lean() here too for consistency
+            const customerData = await getCustomerProfile(userId);
 
             if (!customerData) {
                 return res.status(404).json({ message: "Customer profile not found" });
@@ -198,23 +194,10 @@ export const updateUserInfo = async (req, res, next) => {
         if (allowedUpdates["address.map"]) validationError = validateMapCoordinates(allowedUpdates["address.map"], true);
         if (validationError) return res.status(400).json({ message: validationError });
 
-        let updatedUser;
-        const updateOptions = { 
-            returnDocument: 'after', // Replaces new: true to fix the deprecation warning
-            runValidators: true // Ensures the new data adheres to your Mongoose Schema rules
-        };
-
         if (currentUserRole === "vendor") {
-            updatedUser = await Vendor.findByIdAndUpdate(userId, allowedUpdates, updateOptions).lean();
+            const updatedUser = await updateVendorProfile(userId, allowedUpdates);
             
             if (!updatedUser) return res.status(404).json({ message: "Vendor profile not found" });
-
-            if (updatedUser.address?.map && updatedUser.pickupTime) {
-                await UsersAuth.updateOne(
-                    { _id: updatedUser.authId, accountStatus: "incompleteData" },
-                    { accountStatus: "active" }
-                );
-            }
 
             return res.status(200).json({
                 success: true,
@@ -224,7 +207,7 @@ export const updateUserInfo = async (req, res, next) => {
         }
 
         if (currentUserRole === "customer") {
-            updatedUser = await Customer.findByIdAndUpdate(userId, allowedUpdates, updateOptions).lean();
+            const updatedUser = await updateCustomerProfile(userId, allowedUpdates);
             
             if (!updatedUser) return res.status(404).json({ message: "Customer profile not found" });
 
@@ -291,31 +274,12 @@ export const changePassword = async (req, res, next) => {
             });
         }
 
-        
-        let profile;
-        if (currentUserRole === "vendor") {
-            profile = await Vendor.findById(userId).select("authId");
-        } else if (currentUserRole === "customer") {
-            profile = await Customer.findById(userId).select("authId");
-        }
+        const result = await changeUserPassword(userId, currentUserRole, oldPassword, newPassword);
 
-        if (!profile || !profile.authId) {
-            return res.status(404).json({ message: "authentication record not found" });
+        if (result.error) {
+            const status = result.error.toLowerCase().includes("not found") ? 404 : 400;
+            return res.status(status).json({ message: result.error });
         }
-
-        
-        const userAuth = await UsersAuth.findById(profile.authId);
-        if (!userAuth) {
-            return res.status(404).json({ message: "Authentication record not found" });
-        }
-
-        
-        const isMatch = await bcrypt.compare(oldPassword, userAuth.password);
-        if (!isMatch) {
-            return res.status(400).json({ message: "Can not change password" });
-        }
-        userAuth.password = newPassword;
-        await userAuth.save();
 
         return res.status(200).json({
             success: true,
@@ -326,6 +290,7 @@ export const changePassword = async (req, res, next) => {
         next(error);
     }
 };
+
 // GET /get-vendors | Auth required (admin) | get all vendors list
 /**
  * @api {get} /api/users/get-vendors Get All Vendors
@@ -368,16 +333,7 @@ export const getAllVendors = async (req, res, next) => {
         const page = parseInt(req.query.page, 10) || 1;   // Default to page 1
         const limit = parseInt(req.query.limit, 10) || 10; // Default to 10 records per page
         
-        
-        const skip = (page - 1) * limit;
-
-        const vendors = await Vendor.find({})
-            .sort({ moneyOwed: -1 }) 
-            .skip(skip)   // Skips the previous pages' items
-            .limit(limit) // Grabs only the current page's size
-            .lean();
-
-        const totalVendors = await Vendor.countDocuments({});
+        const { vendors, totalVendors } = await getPaginatedVendors(page, limit);
 
         return res.status(200).json({ 
             success: true, 
@@ -395,6 +351,7 @@ export const getAllVendors = async (req, res, next) => {
         next(error);
     }
 };
+
 // GET /users/customers | Auth required (admin) | get all customers list with pagination
 /**
  * @api {get} /api/users/customers Get All Customers
@@ -436,17 +393,8 @@ export const getAllCustomers = async (req, res, next) => {
         
         const page = parseInt(req.query.page, 10) || 1;   // Default to page 1
         const limit = parseInt(req.query.limit, 10) || 10; // Default to 10 customers per page
-        const skip = (page - 1) * limit;
 
-        
-        const customers = await Customer.find({})
-            .sort({ createdAt: -1 }) // Shows newest registered customers first
-            .skip(skip)
-            .limit(limit)
-            .lean(); // Faster lookup performance
-
-        
-        const totalCustomers = await Customer.countDocuments({});
+        const { customers, totalCustomers } = await getPaginatedCustomers(page, limit);
 
         return res.status(200).json({ 
             success: true, 
@@ -464,6 +412,7 @@ export const getAllCustomers = async (req, res, next) => {
         next(error);
     }
 };
+
 // GET /users/vendor-dashboard | Auth required (vendor) | get vendor analytics summary
 /**
  * @api {get} /api/users/vendor-dashboard Get Vendor Analytics Summary
@@ -498,53 +447,19 @@ export const getVendorAnalytics = async (req, res, next) => {
             return res.status(403).json({ message: "Forbidden: Unauthorized access" });
         }
 
-        const vendorOrders = await Order.find({
-            "products.vendorId": userId 
-        });
+        const analytics = await computeVendorAnalytics(userId);
 
-        if (vendorOrders.length === 0) {
+        if (!analytics) {
            return res.status(200).json({ 
                success: true, 
                message: "Vendor has no orders yet",
                analytics: { profit: 0, productsInCurrentOrders: 0, productsInCompletedOrders: 0, numberOfCustomers: 0 }
            }); 
         }
-        
-        let profit = 0;
-        let currentOrderItems = 0;
-        let completedOrderItems = 0;
-        const customerSet = new Set(); 
-
-        vendorOrders.forEach(order => {
-            let orderHasVendorProduct = false;
-
-            order.products.forEach(item => {
-                
-                if (item.vendorId?.toString() === userId) {
-                    orderHasVendorProduct = true;
-
-                    if (order.status === 'completed') {
-                        profit += item.priceAtPurchase * item.quantity * 0.9; 
-                        completedOrderItems += item.quantity;
-                    } else if (['pending', 'ready'].includes(order.status)) {
-                        currentOrderItems += item.quantity;
-                    }
-                }
-            });
-
-            if (orderHasVendorProduct && order.customerId) {
-                customerSet.add(order.customerId.toString());
-            }
-        });
 
         return res.status(200).json({
             success: true,
-            analytics: {
-                profit: Math.round(profit * 100) / 100, 
-                productsInCurrentOrders: currentOrderItems,
-                productsInCompletedOrders: completedOrderItems,
-                numberOfCustomers: customerSet.size 
-            }
+            analytics
         });
 
     } catch (error) {

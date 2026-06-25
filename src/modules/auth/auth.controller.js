@@ -2,13 +2,15 @@ import UsersAuth from "../../models/usersAuth.model.js";
 import {
     validateUsername, validateEmail, validatePassword, validateRole,
     validatePhoneNumber, validateAddress, validateShopName, validateTaxNumber, validateName
-
 } from "../../utils/userDataValidators.js";
-import { sendPasswordResetEmail } from "../auth/auth.services.js";
-import { registerUser } from "./auth.services.js";
+import {
+    registerUser,
+    loginUser,
+    initiatePasswordReset,
+    completePasswordReset,
+} from "./auth.services.js";
 import Vendors from "../../models/vendors.model.js";
-import jwt from "jsonwebtoken";
-import bcrypt from 'bcrypt';
+import { AUTH_COOKIE_OPTIONS, CLEAR_COOKIE_OPTIONS } from "../../config/auth.js";
 
 /**
  * Register a new user (customer, vendor, or admin).
@@ -108,10 +110,7 @@ export const register = async (req, res, next) => {
  * - Same error message is returned for invalid credentials (security)
  *
  * Auth Flow:
- * - Find user by username
- * - Validate password using bcrypt
- * - Generate JWT token (sub, role, accountStatus)
- * - Store token in httpOnly cookie
+ * - Find user by username → validate password → issue JWT → set httpOnly cookie
  *
  * Cookie:
  * - httpOnly: true (prevents JS access)
@@ -133,32 +132,14 @@ export const login = async (req, res, next) => {
             });
         }
 
-        username = username.trim();
+        const token = await loginUser(username, password);
 
-        const user = await UsersAuth.findOne({ username });
-
-        if (!user) {
+        if (!token) {
             return res.status(400).json({ message: "Invalid username or password." });
         }
 
-        const isMatch = await bcrypt.compare(password, user.password);
+        res.cookie("token", token, AUTH_COOKIE_OPTIONS);
 
-        if (!isMatch) {
-            return res.status(400).json({ message: "Invalid username or password." });
-        }
-
-        const jwtToken = jwt.sign(
-            { sub: user._id, role: user.role },
-            process.env.JWT_SECRET,
-            { expiresIn: "7d" }
-        );
-
-        res.cookie("token", jwtToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "none",
-            maxAge: 7 * 24 * 60 * 60 * 1000
-        });
         return res.status(200).json({
             message: "Login successful."
         })
@@ -176,21 +157,12 @@ export const login = async (req, res, next) => {
  * - Clears JWT cookie from client browser
  * - Invalidates session on frontend (stateless backend)
  *
- * Cookie:
- * - httpOnly: true (secure cookie removal)
- * - secure: true in production only
- * - sameSite: none (matches login configuration)
- *
  * @returns {Object} 200 - Logout successful
  * @returns {Object} 500 - Server error
  */
 export const logout = async (req, res, next) => {
     try {
-        res.clearCookie("token", {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "none"
-        });
+        res.clearCookie("token", CLEAR_COOKIE_OPTIONS);
 
         return res.status(200).json({
             message: "Logged out successfully."
@@ -224,35 +196,10 @@ export const forgotPassword = async (req, res, next) => {
             return res.status(400).json({ message: "Username is required" });
         }
 
-        const user = await UsersAuth.findOne({ username });
+        // Service handles lookup + token + email; controller stays unaware of whether the user exists
+        await initiatePasswordReset(username, process.env.FRONTEND_URL);
 
-        if (!user) {
-            return res.status(200).json({
-                message: "If the account exists, a reset link has been sent to the associated email."
-            });
-        }
-
-        const token = jwt.sign(
-            { userId: user._id },
-            process.env.JWT_SECRET,
-            { expiresIn: "15m" }
-        );
-
-        user.resetToken = token;
-        await user.save();
-
-        const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-
-        const emailResult = await sendPasswordResetEmail(
-            user.email,
-            user.username,
-            resetLink
-        );
-
-        if (emailResult && !emailResult.success) {
-            console.error(`[Warning] Reset email failed to send to ${user.username} (${user.email})`);
-        }
-
+        // Always return the same message to prevent account enumeration
         return res.status(200).json({
             message: "If the account exists, a reset link has been sent to the associated email."
         });
@@ -290,30 +237,14 @@ export const resetPassword = async (req, res, next) => {
             });
         }
 
-        let decoded;
-        try {
-            decoded = jwt.verify(token, process.env.JWT_SECRET);
-        } catch (error) {
-            return res.status(400).json({
-                message: "Link is invalid or has expired"
-            });
+        const result = await completePasswordReset(token, newPassword);
+
+        if (result.error === "not_found") {
+            return res.status(404).json({ message: "User not found" });
         }
-
-        const user = await UsersAuth.findById(decoded.userId);
-
-        if (!user) {
-            return res.status(404).json({
-                message: "User not found"
-            });
+        if (result.error) {
+            return res.status(400).json({ message: result.error });
         }
-
-        if (user.resetToken !== token) {
-            return res.status(400).json({ message: "Link is invalid or has expired" });
-        }
-
-        user.password = newPassword;
-        user.resetToken = null;
-        await user.save();
 
         return res.status(200).json({
             message: "Password reset successfully!"

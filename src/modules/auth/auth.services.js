@@ -1,10 +1,14 @@
 import nodemailer from 'nodemailer';
-
-
 import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
+
 import UsersAuth from "../../models/usersAuth.model.js";
 import Vendors from "../../models/vendors.model.js";
 import Customers from "../../models/customers.model.js";
+import { JWT_CONFIG, RESET_TOKEN_CONFIG } from "../../config/auth.js";
+
+// ── Registration ──────────────────────────────────────────────────────────────
 
 export async function registerUser({ username, password, role, email, profileData }) {
     const session = await mongoose.startSession();
@@ -40,6 +44,88 @@ export async function registerUser({ username, password, role, email, profileDat
     }
 }
 
+// ── Login ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Verifies credentials and returns a signed JWT string.
+ * Cookie setting is handled by the controller — services stay transport-agnostic.
+ */
+export async function loginUser(username, password) {
+    const user = await UsersAuth.findOne({ username: username.trim() });
+    if (!user) return null;
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return null;
+
+    const token = jwt.sign(
+        { sub: user._id, role: user.role },
+        process.env.JWT_SECRET,
+        JWT_CONFIG
+    );
+
+    return token;
+}
+
+// ── Password Reset ────────────────────────────────────────────────────────────
+
+/**
+ * Generates a short-lived reset token, persists it to the user record, and sends the email.
+ * Returns the user document if found, or null if not found.
+ */
+export async function initiatePasswordReset(username, frontendUrl) {
+    const user = await UsersAuth.findOne({ username });
+    if (!user) return null; // Caller always returns the same generic 200 — no leak
+
+    const token = jwt.sign(
+        { userId: user._id },
+        process.env.JWT_SECRET,
+        RESET_TOKEN_CONFIG
+    );
+
+    user.resetToken = token;
+    await user.save();
+
+    const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+
+    const emailResult = await sendPasswordResetEmail(
+        user.email,
+        user.username,
+        resetLink
+    );
+
+    if (emailResult && !emailResult.success) {
+        console.error(`[Warning] Reset email failed to send to ${user.username} (${user.email})`);
+    }
+
+    return user;
+}
+
+/**
+ * Validates a reset token, applies the new password, and clears the token.
+ */
+export async function completePasswordReset(token, newPassword) {
+    let decoded;
+    try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+        return { error: "Link is invalid or has expired" };
+    }
+
+    const user = await UsersAuth.findById(decoded.userId);
+    if (!user) return { error: "not_found" };
+
+    if (user.resetToken !== token) {
+        return { error: "Link is invalid or has expired" };
+    }
+
+    user.password = newPassword;
+    user.resetToken = null;
+    await user.save();
+
+    return { success: true };
+}
+
+// ── Email Transport ───────────────────────────────────────────────────────────
 
 const transporter = nodemailer.createTransport({
     service: process.env.NODEMAILER_EMAIL_SERVICE,
