@@ -75,25 +75,37 @@ export const sendPasswordResetEmail = async (email, name, resetLink) => {
         to: email,
         subject: "Password Reset Request",
         html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #222;">
-        <h2>Password Reset Request</h2>
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; background-color: #f8fafc; padding: 40px 20px; color: #1e293b;">
+        <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-top: 4px solid #0f8a5f;">
+          
+          <h2 style="color: #1e293b; margin-top: 0; margin-bottom: 20px; font-size: 24px;">Password Reset Request</h2>
 
-        <p>We received a request to reset the password for this account:</p>
+          <p style="margin-bottom: 16px;">We received a request to reset the password for this account:</p>
 
-        <p><b>Username:</b> ${name}</p>
+          <p style="margin-bottom: 24px; background-color: #f8fafc; padding: 12px; border-radius: 6px; border-left: 3px solid #14a56f;">
+            <b style="color: #1e293b;">Username:</b> ${name}
+          </p>
 
-        <p>Click the button below to reset your password:</p>
+          <p style="margin-bottom: 24px;">Click the button below to reset your password:</p>
 
-        <a href="${resetLink}"
-           style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">
-           Reset Password
-        </a>
+          <div style="text-align: center; margin-bottom: 24px;">
+            <a href="${resetLink}"
+               style="display: inline-block; padding: 12px 24px; background-color: #0f8a5f; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: bold;">
+               Reset Password
+            </a>
+          </div>
 
-        <p>This link will expire in <b>15 minutes</b>.</p>
+          <p style="color: #ef4444; font-size: 14px; margin-bottom: 24px; font-weight: 500;">
+            ⚠️ This link will expire in <b>15 minutes</b>.
+          </p>
 
-        <p style="font-size:12px;color:#666;">
-          If you did not request this, you can ignore this email.
-        </p>
+          <hr style="border: 0; border-top: 1px solid #f8fafc; margin-bottom: 16px;" />
+
+          <p style="font-size: 12px; color: #1e293b; opacity: 0.7; margin: 0;">
+            If you did not request this, you can safely ignore this email.
+          </p>
+          
+        </div>
       </div>
     `,
     });
