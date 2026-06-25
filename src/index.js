@@ -44,7 +44,7 @@ await connectDB();
 
 // 3. Home route
 app.get("/", (req, res) => {
-  res.json({ message: "Welcome to the Waste Reduction API!" });
+  res.json({ message: "Welcome to the Food Waste Reduction API!" });
 });
 // 4. Rate limit
 app.use(globalLimiter)
