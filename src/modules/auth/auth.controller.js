@@ -66,7 +66,7 @@ export const register = async (req, res, next) => {
  * - sameSite: none (required for cross-origin frontend)
  * - maxAge: 7 days
  *
- * @returns {Object} 200 - Login successful
+ * @returns {Object} 200 - Login successful. Returns `{ message, user }` where `user` includes `authId`, `id` (role-specific profile ID), `username`, `role`, and `accountStatus`.
  * @returns {Object} 400 - Invalid credentials or missing fields
  * @returns {Object} 500 - Server error
  */
@@ -74,11 +74,14 @@ export const login = async (req, res, next) => {
     try {
         const { username, password } = req.body;
 
-        const token = await loginUser(username, password);
+        const { token, userData } = await loginUser(username, password);
 
         res.cookie("token", token, AUTH_COOKIE_OPTIONS);
 
-        return res.status(200).json({ message: "Login successful." });
+        return res.status(200).json({ 
+            message: "Login successful.",
+            user: userData
+        });
     } catch (error) {
         next(error);
     }

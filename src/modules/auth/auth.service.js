@@ -96,7 +96,28 @@ export async function loginUser(username, password) {
         JWT_CONFIG
     );
 
-    return token;
+    let profileId = null;
+    if (user.role === "vendor") {
+        const vendor = await authRepo.findVendorByAuthId(user._id);
+        profileId = vendor ? vendor._id : null;
+    } else if (user.role === "customer") {
+        const customer = await authRepo.findCustomerByAuthId(user._id);
+        profileId = customer ? customer._id : null;
+    } else if (user.role === "admin") {
+        const admin = await authRepo.findAdminByAuthId(user._id);
+        profileId = admin ? admin._id : null;
+    }
+
+    return {
+        token,
+        userData: {
+            authId: user._id,
+            id: profileId,
+            username: user.username,
+            role: user.role,
+            accountStatus: user.accountStatus
+        }
+    };
 }
 
 // ── Password Reset ────────────────────────────────────────────────────────────
