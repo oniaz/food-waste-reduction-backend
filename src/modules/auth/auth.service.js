@@ -5,7 +5,7 @@ import bcrypt from "bcrypt";
 import AppError from "../../utils/AppError.js";
 import { JWT_CONFIG, RESET_TOKEN_CONFIG } from "../../config/auth.js";
 import * as authRepo from "./auth.repository.js";
-import { sendPasswordResetEmail } from "../../utils/mailer.js";
+import { sendPasswordResetEmail, sendAccountStatusEmail } from "../../utils/mailer.js";
 
 // ── Registration ──────────────────────────────────────────────────────────────
 
@@ -50,6 +50,15 @@ export async function registerUser({ username, password, role, email, profileDat
         }
 
         await session.commitTransaction();
+
+        // Send confirmation email to vendors that their account is pending approval
+        if (role === "vendor") {
+            const emailResult = await sendAccountStatusEmail(newAuth.email, newAuth.username, "pending");
+            if (emailResult && !emailResult.success) {
+                console.warn(`[Warning] Welcome email failed to send to registered vendor ${newAuth.username} (${newAuth.email})`);
+            }
+        }
+
         return newAuth;
 
     } catch (err) {
