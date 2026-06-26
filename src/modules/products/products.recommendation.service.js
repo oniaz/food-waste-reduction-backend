@@ -121,10 +121,13 @@ const extractStructuredObject = (parsedData) => {
   return null;
 };
 
-export const getCartRecommendations = async (cartItems, customerId = null) => {
-  if (!cartItems || cartItems.length === 0) return [];
+export const getCartRecommendations = async (cartProductIds, customerId = null) => {
+  if (!cartProductIds || cartProductIds.length === 0) return [];
 
-  const cartProductIds = cartItems.map(item => item._id).filter(Boolean);
+  const cartItems = await Products.find({ _id: { $in: cartProductIds } }).lean();
+  if (cartItems.length === 0) return [];
+
+  const resolvedCartProductIds = cartItems.map(item => item._id);
   const cartVendorIds = cartItems.map(item => item.vendorId).filter(Boolean).map(id => id.toString());
 
   let customerAddress = null;
@@ -137,6 +140,7 @@ export const getCartRecommendations = async (cartItems, customerId = null) => {
     name: item.productName,
     category: item.category,
     tags: item.tags || [],
+    description: item.description || "",
   }));
 
   const prompt = `
@@ -198,7 +202,7 @@ export const getCartRecommendations = async (cartItems, customerId = null) => {
       {
         $match: {
           quantity: { $gt: 0 },
-          _id: { $nin: cartProductIds },
+          _id: { $nin: resolvedCartProductIds },
           $or: [
             { category: { $in: recommendations.suggestedCategories } },
             { tags: { $in: recommendations.suggestedTags } },
