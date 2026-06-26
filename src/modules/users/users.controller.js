@@ -1,12 +1,14 @@
-import Order from "../../models/orders.model.js";
-import Product from "../../models/products.model.js";
-import Customer from "../../models/customers.model.js";
-import Vendor from "../../models/vendors.model.js";
-import express from "express";
-import mongoose from "mongoose";
-import UsersAuth from "../../models/usersAuth.model.js";
-import bcrypt from 'bcrypt';
-import { validateName, validateShopName, validatePhoneNumber, validateAddress, validatePickupTime, validateMapCoordinates } from "../../utils/userDataValidators.js";
+import {
+    getAuthRecord,
+    getVendorProfile,
+    getCustomerProfile,
+    updateVendorProfile,
+    updateCustomerProfile,
+    changeUserPassword,
+    computeVendorAnalytics,
+    getPaginatedVendors,
+    getPaginatedCustomers,
+} from "./users.service.js";
 
 // GET /users/me | Auth required (all roles) | get current user profile with role data
 /**
@@ -25,57 +27,17 @@ import { validateName, validateShopName, validatePhoneNumber, validateAddress, v
  * @param {import('express').Response} res - Express response object used to return JSON payloads.
  * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
  * @returns {Promise<void>} Sends a JSON response with status 200 containing either 'vendorData' or 'customerData'.
- * @throws {401} If the user payload session data cannot be parsed or verified by authentication guards.
- * @throws {403} If the parsed user role does not have authorization clearance to hit the endpoint.
  * @throws {404} If the underlying model document corresponding to the user ID is missing from the database.
  */
 export const getCurrentUser = async (req, res, next) => {
     try {
-        const currentUserRole = req.user?.role;
-        const userId = req.user?.id;
-        const authId = req.user?.authId;
+        const { role: currentUserRole, id: userId, authId } = req.user;
 
-        if (!userId) {
-            return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
-        }
-        if (currentUserRole !== 'vendor' && currentUserRole !== 'customer') {
-            return res.status(403).json({ message: "Forbidden: Only authorized vendors and customers can access this endpoint" });
-        }
-
-        const userAuth = await UsersAuth.findById(authId || userId).select("-password -resetToken").lean();
-        if (!userAuth) {
-            return res.status(404).json({ message: "Account authentication credentials not found" });
-        }
-
-        // Handle Admin Fetching
-        if (currentUserRole === "admin") {
-            return res.status(200).json({
-                success: true,
-                adminData: {
-                    _id: userAuth._id,
-                    username: userAuth.username,
-                    email: userAuth.email,
-                    role: userAuth.role,
-                    accountStatus: userAuth.accountStatus,
-                    createdAt: userAuth.createdAt,
-                    updatedAt: userAuth.updatedAt
-                }
-            });
-        }
+        const userAuth = await getAuthRecord(authId);
 
         // Handle Vendor Fetching
         if (currentUserRole === "vendor") {
-            
-            const vendorData = await Vendor.findById(userId).lean(); // .lean() allows us to freely modify and spread the object safely
-            
-            if (!vendorData) {
-                return res.status(404).json({ message: "Vendor profile not found" });
-            }
-
-            // Calculate rating, protecting against division by zero (0 total ratings)
-            const totalRatings = vendorData.rating?.totalRatingsNumber || 0;
-            const score = vendorData.rating?.score || 0;
-            const vendorRating = totalRatings > 0 ? (score / totalRatings) : 0;
+            const vendorData = await getVendorProfile(userId);
 
             return res.status(200).json({
                 success: true,
@@ -85,18 +47,14 @@ export const getCurrentUser = async (req, res, next) => {
                     email: userAuth.email,
                     role: userAuth.role,
                     accountStatus: userAuth.accountStatus,
-                    vendorRating 
-                }
+                },
             });
         }
 
-        // Handle Customer 
+        // Handle Customer Fetching
         if (currentUserRole === "customer") {
-            const customerData = await Customer.findById(userId).lean(); // Added .lean() here too for consistency
+            const customerData = await getCustomerProfile(userId);
 
-            if (!customerData) {
-                return res.status(404).json({ message: "Customer profile not found" });
-            }
             return res.status(200).json({
                 success: true,
                 customerData: {
@@ -104,14 +62,14 @@ export const getCurrentUser = async (req, res, next) => {
                     username: userAuth.username,
                     email: userAuth.email,
                     role: userAuth.role,
-                    accountStatus: userAuth.accountStatus
-                }
+                    accountStatus: userAuth.accountStatus,
+                },
             });
         }
-        
+
     } catch (error) {
-        next(error); 
-    } 
+        next(error);
+    }
 };
 
 // PATCH /users/me | Auth required (all roles) | update own profile information
@@ -120,124 +78,73 @@ export const getCurrentUser = async (req, res, next) => {
  * @apiName UpdateUserInfo
  * @apiGroup Users
  * @apiPermission customer | vendor
- * @description Modifies specific personal profile details for the authenticated user session. 
- * This endpoint implements strict structural security validation patterns:
- * 1. Isolates payload parsing by role: Vendors may only modify 'shopName', 'address', and 'phoneNumber'. Customers may only modify 'name', 'address', and 'phoneNumber'.
- * 2. Automatically strips out 'undefined' properties from the tracking payload map.
- * 3. Demands that at least one valid key remains post-filtering to avoid wasting database writes.
- * 4. Natively applies Mongoose schema validators on the dynamic fields before modifying the records.
+ * @description Modifies specific personal profile details for the authenticated user session.
+ * Validation of field shapes is handled upstream by validateUpdateProfile middleware.
+ * This controller builds the role-specific allowed update map and delegates to the service.
  * @param {import('express').Request} req - Express request object.
  * @param {Object} req.body - The request body payload containing optional fields to modify.
- * @param {string} [req.body.name] - The new name configuration (Customer only).
- * @param {string} [req.body.shopName] - The new marketplace business name (Vendor only).
- * @param {string} [req.body.address] - The updated default residential or business location string.
- * @param {string} [req.body.phoneNumber] - The updated mobile communication line digits.
  * @param {Object} req.user - Authenticated user payload injected by auth middleware.
  * @param {string} req.user.id - The unique MongoDB ObjectId of the target profile owner.
  * @param {string} req.user.role - The internal authentication role level tier ('customer' or 'vendor').
  * @param {import('express').Response} res - Express response object used to return JSON payloads.
  * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
- * @returns {Promise<void>} Sends a JSON response with status 200 along with the cleanly parsed updated data profile snapshot.
- * @throws {400} If no valid, role-approved parameters are present post-filtering, or if inputs fail base type schema constraints.
- * @throws {401} If the core identity payload values are missing from the request middleware context.
- * @throws {403} If the matching authenticated system role is barred from mutating basic resource models.
- * @throws {404} If the underlying model document corresponding to the parameter index does not exist within the collection.
+ * @returns {Promise<void>} Sends a JSON response with status 200 along with the updated profile snapshot.
+ * @throws {404} If the underlying model document does not exist within the collection.
  */
 export const updateUserInfo = async (req, res, next) => {
     try {
-        const currentUserRole = req.user?.role;
-        const userId = req.user?.id;
+        const { role: currentUserRole, id: userId } = req.user;
 
-        if (!userId) {
-            return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
-        }
-        if (currentUserRole !== 'vendor' && currentUserRole !== 'customer') {
-            return res.status(403).json({ message: "Forbidden: Only authorized vendors and customers can access this endpoint" });
-        }
-
+        // Role-based field filtering lives here in the controller — not in the validator.
+        // The validator (validateUpdateProfile) only checked shapes; we now decide
+        // which of those validated fields are actually allowed for this role.
         let allowedUpdates = {};
-        if (currentUserRole === 'vendor') {
+
+        if (currentUserRole === "vendor") {
             const { shopName, address, phoneNumber, pickupTime, map } = req.body;
             allowedUpdates = { shopName, address, phoneNumber, pickupTime };
             if (map !== undefined) {
                 allowedUpdates["address.map"] = map;
             }
-        } 
-        
-        if (currentUserRole === 'customer') {
+        }
+
+        if (currentUserRole === "customer") {
             const { name, address, phoneNumber } = req.body;
             allowedUpdates = { name, address, phoneNumber };
         }
 
-        
+        // Strip undefined values — only send fields the caller actually provided
         Object.keys(allowedUpdates).forEach(
-            key => allowedUpdates[key] === undefined && delete allowedUpdates[key] // No update for undefined edits
+            (key) => allowedUpdates[key] === undefined && delete allowedUpdates[key]
         );
 
-        
-        if (Object.keys(allowedUpdates).length === 0) { // Check if there's actually anything to update
+        if (Object.keys(allowedUpdates).length === 0) {
             return res.status(400).json({ message: "Bad Request: No valid fields provided for update" });
         }
 
-        let validationError = null;
-        if (allowedUpdates.shopName) validationError = validateShopName(allowedUpdates.shopName, true);
-        if (validationError) return res.status(400).json({ message: validationError });
-
-        if (allowedUpdates.name) validationError = validateName(allowedUpdates.name, true);
-        if (validationError) return res.status(400).json({ message: validationError });
-
-        if (allowedUpdates.phoneNumber) validationError = validatePhoneNumber(allowedUpdates.phoneNumber, true);
-        if (validationError) return res.status(400).json({ message: validationError });
-
-        if (allowedUpdates.address) validationError = validateAddress(allowedUpdates.address, true);
-        if (validationError) return res.status(400).json({ message: validationError });
-
-        if (allowedUpdates.pickupTime) validationError = validatePickupTime(allowedUpdates.pickupTime, true);
-        if (validationError) return res.status(400).json({ message: validationError });
-
-        if (allowedUpdates["address.map"]) validationError = validateMapCoordinates(allowedUpdates["address.map"], true);
-        if (validationError) return res.status(400).json({ message: validationError });
-
-        let updatedUser;
-        const updateOptions = { 
-            returnDocument: 'after', // Replaces new: true to fix the deprecation warning
-            runValidators: true // Ensures the new data adheres to your Mongoose Schema rules
-        };
-
         if (currentUserRole === "vendor") {
-            updatedUser = await Vendor.findByIdAndUpdate(userId, allowedUpdates, updateOptions).lean();
-            
-            if (!updatedUser) return res.status(404).json({ message: "Vendor profile not found" });
-
-            if (updatedUser.address?.map && updatedUser.pickupTime) {
-                await UsersAuth.updateOne(
-                    { _id: updatedUser.authId, accountStatus: "incompleteData" },
-                    { accountStatus: "active" }
-                );
-            }
+            const updatedUser = await updateVendorProfile(userId, allowedUpdates);
 
             return res.status(200).json({
                 success: true,
                 message: "Vendor profile updated successfully",
-                vendorData: updatedUser
+                vendorData: updatedUser,
             });
         }
 
         if (currentUserRole === "customer") {
-            updatedUser = await Customer.findByIdAndUpdate(userId, allowedUpdates, updateOptions).lean();
-            
-            if (!updatedUser) return res.status(404).json({ message: "Customer profile not found" });
+            const updatedUser = await updateCustomerProfile(userId, allowedUpdates);
 
             return res.status(200).json({
                 success: true,
                 message: "Customer profile updated successfully",
-                customerData: updatedUser
+                customerData: updatedUser,
             });
         }
-        
+
     } catch (error) {
-         next(error); 
-    } 
+        next(error);
+    }
 };
 
 // PATCH /users/change-password | Auth required (all roles) | change password with old password verification
@@ -263,69 +170,25 @@ export const updateUserInfo = async (req, res, next) => {
  * @param {import('express').Response} res - Express response object used to return JSON payloads.
  * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
  * @returns {Promise<void>} Sends a JSON response with status 200 confirming successful credential mutation.
- * @throws {400} If required string inputs are missing, formatted improperly, or if the current password verification fails bcrypt cross-referencing.
- * @throws {401} If the request context is missing active user authentication metadata.
- * @throws {403} If the underlying security role level does not possess clearance to execute credential changes.
+ * @throws {400} If the current password verification fails bcrypt cross-referencing.
  * @throws {404} If either the secondary profile record or primary matching auth collection entity cannot be found.
  */
 export const changePassword = async (req, res, next) => {
     try {
-        const currentUserRole = req.user?.role;
-        const userId = req.user?.id;
+        const { role: currentUserRole, id: userId } = req.user;
         const { oldPassword, newPassword } = req.body;
-        
 
-        
-        if (!userId) {
-            return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
-        }
-        if (currentUserRole !== 'vendor' && currentUserRole !== 'customer') {
-            return res.status(403).json({ message: "Forbidden: Unauthorized access" });
-        }
-        if (!oldPassword || !newPassword) {
-            return res.status(400).json({ message: "Bad Request: Missing required parameters" });
-        }
-        if (typeof oldPassword !== 'string' || typeof newPassword !== 'string') {
-            return res.status(400).json({ 
-                message: "Bad Request: Password fields must be valid text strings." 
-            });
-        }
-
-        
-        let profile;
-        if (currentUserRole === "vendor") {
-            profile = await Vendor.findById(userId).select("authId");
-        } else if (currentUserRole === "customer") {
-            profile = await Customer.findById(userId).select("authId");
-        }
-
-        if (!profile || !profile.authId) {
-            return res.status(404).json({ message: "authentication record not found" });
-        }
-
-        
-        const userAuth = await UsersAuth.findById(profile.authId);
-        if (!userAuth) {
-            return res.status(404).json({ message: "Authentication record not found" });
-        }
-
-        
-        const isMatch = await bcrypt.compare(oldPassword, userAuth.password);
-        if (!isMatch) {
-            return res.status(400).json({ message: "Can not change password" });
-        }
-        userAuth.password = newPassword;
-        await userAuth.save();
+        await changeUserPassword(userId, currentUserRole, oldPassword, newPassword);
 
         return res.status(200).json({
             success: true,
-            message: "Password changed successfully"
+            message: "Password changed successfully",
         });
-
     } catch (error) {
         next(error);
     }
 };
+
 // GET /get-vendors | Auth required (admin) | get all vendors list
 /**
  * @api {get} /api/users/get-vendors Get All Vendors
@@ -334,67 +197,41 @@ export const changePassword = async (req, res, next) => {
  * @apiPermission admin
  * @description Retrieves a paginated matrix of all registered marketplace vendor records.
  * This dashboard endpoint applies administrative workflow and performance layout logic:
- * 1. Enforces absolute authorization lockouts restricting execution exclusively to administrative tokens.
- * 2. Parses string-based query parameters securely into dynamic numerical pagination keys ('page', 'limit').
- * 3. Implements non-blocking skips and scale restrictions to minimize bandwidth allocation.
- * 4. Sorts output lists in descending order based on total 'moneyOwed' ledger status parameters.
- * 5. Returns a rich, descriptive meta-pagination wrapper alongside the list array payload.
+ * 1. Parses string-based query parameters securely into dynamic numerical pagination keys ('page', 'limit').
+ * 2. Implements non-blocking skips and scale restrictions to minimize bandwidth allocation.
+ * 3. Sorts output lists in descending order based on total 'moneyOwed' ledger status parameters.
+ * 4. Returns a rich, descriptive meta-pagination wrapper alongside the list array payload.
  * @param {import('express').Request} req - Express request object.
  * @param {Object} req.query - URL query configuration strings.
  * @param {number} [req.query.page=1] - The sequential chunk section page index to retrieve.
  * @param {number} [req.query.limit=10] - The maximum sizing ceiling of structural records per array chunk.
- * @param {Object} req.user - Authenticated user payload injected by auth middleware.
- * @param {string} req.user.authId - The primary unique matching global credential record link identifier.
- * @param {string} req.user.role - The authorization system role string of the active entity ('admin').
  * @param {import('express').Response} res - Express response object used to return JSON payloads.
  * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
  * @returns {Promise<void>} Sends a JSON response with status 200 detailing the total database record inventory count alongside the paginated vendor block.
- * @throws {401} If session credential links are missing or corrupted post-middleware evaluation.
- * @throws {403} If the underlying request payload claims an access tier other than 'admin'.
  */
 export const getAllVendors = async (req, res, next) => {
     try {
-        const currentUserRole = req.user?.role;
-        const authId = req.user?.authId
-        
-        if (!authId) {
-            return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
-        }
-        if (currentUserRole !== 'admin') {
-            return res.status(403).json({ message: "Forbidden: Unauthorized access" });
-        }
-
-        
         const page = parseInt(req.query.page, 10) || 1;   // Default to page 1
         const limit = parseInt(req.query.limit, 10) || 10; // Default to 10 records per page
-        
-        
-        const skip = (page - 1) * limit;
 
-        const vendors = await Vendor.find({})
-            .sort({ moneyOwed: -1 }) 
-            .skip(skip)   // Skips the previous pages' items
-            .limit(limit) // Grabs only the current page's size
-            .lean();
+        const { vendors, totalVendors } = await getPaginatedVendors(page, limit);
 
-        const totalVendors = await Vendor.countDocuments({});
-
-        return res.status(200).json({ 
-            success: true, 
+        return res.status(200).json({
+            success: true,
             pagination: {
                 totalVendors,
                 currentPage: page,
                 totalPages: Math.ceil(totalVendors / limit),
-                limit
+                limit,
             },
-            count: vendors.length, 
-            vendors 
+            count: vendors.length,
+            vendors,
         });
-        
     } catch (error) {
         next(error);
     }
 };
+
 // GET /users/customers | Auth required (admin) | get all customers list with pagination
 /**
  * @api {get} /api/users/customers Get All Customers
@@ -403,67 +240,41 @@ export const getAllVendors = async (req, res, next) => {
  * @apiPermission admin
  * @description Retrieves a paginated list matrix of all registered marketplace customer records.
  * This endpoint provides administrative overview tracking through specialized data behaviors:
- * 1. Restricts caller context explicitly to admin roles, rejecting unauthorized entry.
- * 2. Parses string-based query parameters safely into base-10 numerical indices ('page', 'limit').
- * 3. Utilizes lean database scans alongside skip and allocation ceilings to guarantee minimal memory overhead.
- * 4. Sorts output lists chronologically in descending order to surface the most recent signups first.
- * 5. Returns a rich, descriptive meta-pagination wrapper alongside the customers list array block.
+ * 1. Parses string-based query parameters safely into base-10 numerical indices ('page', 'limit').
+ * 2. Utilizes lean database scans alongside skip and allocation ceilings to guarantee minimal memory overhead.
+ * 3. Sorts output lists chronologically in descending order to surface the most recent signups first.
+ * 4. Returns a rich, descriptive meta-pagination wrapper alongside the customers list array block.
  * @param {import('express').Request} req - Express request object.
  * @param {Object} req.query - URL query parameter keys.
  * @param {number} [req.query.page=1] - The current target slice chunk page index to retrieve.
  * @param {number} [req.query.limit=10] - The maximum capacity ceiling of customer entries per page window.
- * @param {Object} req.user - Authenticated user payload injected by auth middleware.
- * @param {string} req.user.authId - The primary unique matching global credential record link identifier.
- * @param {string} req.user.role - The authorization system role string of the active entity ('admin').
  * @param {import('express').Response} res - Express response object used to transmit JSON payloads.
  * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
  * @returns {Promise<void>} Sends a JSON response with status 200 detailing structural meta-pagination indices and the customer document list.
- * @throws {401} If session credential links are missing or corrupted post-middleware validation.
- * @throws {403} If the incoming actor's permission profile role is anything other than 'admin'.
  */
 export const getAllCustomers = async (req, res, next) => {
     try {
-        const currentUserRole = req.user?.role;
-        const authId = req.user?.authId
-        
-        if (!authId) {
-            return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
-        }
-        if (currentUserRole !== 'admin') {
-            return res.status(403).json({ message: "Forbidden: Unauthorized access" });
-        }
-
-        
         const page = parseInt(req.query.page, 10) || 1;   // Default to page 1
         const limit = parseInt(req.query.limit, 10) || 10; // Default to 10 customers per page
-        const skip = (page - 1) * limit;
 
-        
-        const customers = await Customer.find({})
-            .sort({ createdAt: -1 }) // Shows newest registered customers first
-            .skip(skip)
-            .limit(limit)
-            .lean(); // Faster lookup performance
+        const { customers, totalCustomers } = await getPaginatedCustomers(page, limit);
 
-        
-        const totalCustomers = await Customer.countDocuments({});
-
-        return res.status(200).json({ 
-            success: true, 
+        return res.status(200).json({
+            success: true,
             pagination: {
                 totalCustomers,
                 currentPage: page,
                 totalPages: Math.ceil(totalCustomers / limit),
-                limit
+                limit,
             },
-            count: customers.length, 
-            customers 
+            count: customers.length,
+            customers,
         });
-        
     } catch (error) {
         next(error);
     }
 };
+
 // GET /users/vendor-dashboard | Auth required (vendor) | get vendor analytics summary
 /**
  * @api {get} /api/users/vendor-dashboard Get Vendor Analytics Summary
@@ -480,73 +291,30 @@ export const getAllCustomers = async (req, res, next) => {
  * @param {import('express').Request} req - Express request object.
  * @param {Object} req.user - Authenticated user payload injected by auth middleware.
  * @param {string} req.user.id - The unique MongoDB ObjectId of the vendor requesting analytics.
- * @param {string} req.user.role - The authorized system permission tier role of the user ('vendor').
  * @param {import('express').Response} res - Express response object used to return JSON payloads.
  * @param {import('express').NextFunction} next - Express next middleware function for global centralized error handling.
  * @returns {Promise<void>} Sends a JSON response with status 200 containing an 'analytics' data map showing net profit, rolling product inventory stats, and customer counts.
- * @throws {401} If identity profile context links are absent from the session middleware payload.
- * @throws {403} If the incoming actor's permission profile role is anything other than 'vendor'.
  */
 export const getVendorAnalytics = async (req, res, next) => {
     try {
-        const currentUserRole = req.user?.role;
-        const userId = req.user?.id; 
-        if (!userId) {
-            return res.status(401).json({ message: "Unauthorized: User ID not found in session" });
-        }
-        if (currentUserRole !== 'vendor') {
-            return res.status(403).json({ message: "Forbidden: Unauthorized access" });
-        }
+        const { id: userId } = req.user;
 
-        const vendorOrders = await Order.find({
-            "products.vendorId": userId 
-        });
+        const analytics = await computeVendorAnalytics(userId);
 
-        if (vendorOrders.length === 0) {
-           return res.status(200).json({ 
-               success: true, 
-               message: "Vendor has no orders yet",
-               analytics: { profit: 0, productsInCurrentOrders: 0, productsInCompletedOrders: 0, numberOfCustomers: 0 }
-           }); 
-        }
-        
-        let profit = 0;
-        let currentOrderItems = 0;
-        let completedOrderItems = 0;
-        const customerSet = new Set(); 
-
-        vendorOrders.forEach(order => {
-            let orderHasVendorProduct = false;
-
-            order.products.forEach(item => {
-                
-                if (item.vendorId?.toString() === userId) {
-                    orderHasVendorProduct = true;
-
-                    if (order.status === 'completed') {
-                        profit += item.priceAtPurchase * item.quantity * 0.9; 
-                        completedOrderItems += item.quantity;
-                    } else if (['pending', 'ready'].includes(order.status)) {
-                        currentOrderItems += item.quantity;
-                    }
-                }
+        if (!analytics) {
+            return res.status(200).json({
+                success: true,
+                message: "Vendor has no orders yet",
+                analytics: {
+                    profit: 0,
+                    productsInCurrentOrders: 0,
+                    productsInCompletedOrders: 0,
+                    numberOfCustomers: 0,
+                },
             });
+        }
 
-            if (orderHasVendorProduct && order.customerId) {
-                customerSet.add(order.customerId.toString());
-            }
-        });
-
-        return res.status(200).json({
-            success: true,
-            analytics: {
-                profit: Math.round(profit * 100) / 100, 
-                productsInCurrentOrders: currentOrderItems,
-                productsInCompletedOrders: completedOrderItems,
-                numberOfCustomers: customerSet.size 
-            }
-        });
-
+        return res.status(200).json({ success: true, analytics });
     } catch (error) {
         console.error("Error fetching vendor analytics:", error);
         next(error);

@@ -409,8 +409,14 @@ POST /api/auth/login
 
 ```json
 {
-  "success": true,
-  "message": "Login successful."
+  "message": "Login successful.",
+  "user": {
+    "authId": "60d21b4667d0d8992e610c85",
+    "id": "60d21b4667d0d8992e610c86",
+    "username": "fresh_basket",
+    "role": "vendor",
+    "accountStatus": "active"
+  }
 }
 ```
 
@@ -1969,10 +1975,7 @@ The system **never errors due to AI failures** — it falls through to the next 
 
 | Field | Type | Required | Validation |
 |---|---|---|---|
-| `cartItems` | array | Yes | Non-empty array of cart item objects |
-| `cartItems[N].category` | string | Yes | Non-empty string |
-| `cartItems[N].productName` | string | Yes | Non-empty string |
-| `cartItems[N].tags` | string[] | No | Array of non-empty strings when provided |
+| `cartItems` | array | Yes | Non-empty array of valid product IDs (24-character hexadecimal strings) |
 
 **Request Example**
 
@@ -1981,15 +1984,8 @@ POST /api/products/recommendations
 
 {
   "cartItems": [
-    {
-      "category": "bakery",
-      "productName": "Whole Wheat Loaf",
-      "tags": ["quick breakfast (fetoor)", "crunchy bite"]
-    },
-    {
-      "category": "dairy",
-      "productName": "Rayeb Yogurt"
-    }
+    "664b3e7ebc4f3a0017a01d01",
+    "663b2c8fac4f3a0017a01d02"
   ]
 }
 ```
