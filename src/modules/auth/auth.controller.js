@@ -1,14 +1,10 @@
-import UsersAuth from "../../models/usersAuth.model.js";
 import {
-    validateUsername, validateEmail, validatePassword, validateRole,
-    validatePhoneNumber, validateAddress, validateShopName, validateTaxNumber, validateName
-
-} from "../../utils/userDataValidators.js";
-import { sendPasswordResetEmail } from "../auth/auth.services.js";
-import { registerUser } from "./auth.services.js";
-import Vendors from "../../models/vendors.model.js";
-import jwt from "jsonwebtoken";
-import bcrypt from 'bcrypt';
+    registerUser,
+    loginUser,
+    initiatePasswordReset,
+    completePasswordReset,
+} from "./auth.service.js";
+import { AUTH_COOKIE_OPTIONS, CLEAR_COOKIE_OPTIONS } from "../../config/auth.js";
 
 /**
  * Register a new user (customer, vendor, or admin).
@@ -37,57 +33,11 @@ import bcrypt from 'bcrypt';
  */
 export const register = async (req, res, next) => {
     try {
-        let { username, password, role, email, ...profileData } = req.body;
-
-        if (!username || !password || !role || !email) {
-            return res.status(400).json({
-                message: "All fields are required: username, email, password, role."
-            });
-        }
-
-        username = username.trim();
-        email = email.trim().toLowerCase();
-        role = role?.trim().toLowerCase();
-
-        const roleError = validateRole(role);
-        const usernameError = validateUsername(username);
-        const emailError = validateEmail(email);
-        const passwordError = validatePassword(password);
-
-        const validationError = roleError || usernameError || emailError || passwordError;
-        if (validationError) return res.status(400).json({ message: validationError });
-
-
-        const existingUser = await UsersAuth.findOne({ username });
-        if (existingUser) {
-            return res.status(400).json({ message: "Username already exists." });
-        }
-
-        if (role === "vendor") {
-            const { shopName, phoneNumber, taxNumber, address } = profileData;
-            const err =
-                validateShopName(shopName) ||
-                validatePhoneNumber(phoneNumber) ||
-                validateTaxNumber(taxNumber) ||
-                validateAddress(address);
-            if (err) return res.status(400).json({ message: err });
-            if (await Vendors.findOne({ taxNumber: taxNumber.trim() }))
-                return res.status(400).json({ message: "Tax number already in use." });
-        }
-
-        if (role === "customer") {
-            const { name, phoneNumber, address } = profileData;
-            const err =
-                validateName(name) ||
-                validatePhoneNumber(phoneNumber) ||
-                validateAddress(address);
-            if (err) return res.status(400).json({ message: err });
-        }
+        const { username, password, role, email, ...profileData } = req.body;
 
         await registerUser({ username, password, role, email, profileData });
 
         return res.status(201).json({ message: "User registered successfully." });
-
     } catch (error) {
         next(error);
     }
@@ -108,10 +58,7 @@ export const register = async (req, res, next) => {
  * - Same error message is returned for invalid credentials (security)
  *
  * Auth Flow:
- * - Find user by username
- * - Validate password using bcrypt
- * - Generate JWT token (sub, role, accountStatus)
- * - Store token in httpOnly cookie
+ * - Find user by username → validate password → issue JWT → set httpOnly cookie
  *
  * Cookie:
  * - httpOnly: true (prevents JS access)
@@ -125,43 +72,13 @@ export const register = async (req, res, next) => {
  */
 export const login = async (req, res, next) => {
     try {
-        let { username, password } = req.body;
+        const { username, password } = req.body;
 
-        if (!username || !password) {
-            return res.status(400).json({
-                message: "Username and password are required."
-            });
-        }
+        const token = await loginUser(username, password);
 
-        username = username.trim();
+        res.cookie("token", token, AUTH_COOKIE_OPTIONS);
 
-        const user = await UsersAuth.findOne({ username });
-
-        if (!user) {
-            return res.status(400).json({ message: "Invalid username or password." });
-        }
-
-        const isMatch = await bcrypt.compare(password, user.password);
-
-        if (!isMatch) {
-            return res.status(400).json({ message: "Invalid username or password." });
-        }
-
-        const jwtToken = jwt.sign(
-            { sub: user._id, role: user.role },
-            process.env.JWT_SECRET,
-            { expiresIn: "7d" }
-        );
-
-        res.cookie("token", jwtToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "none",
-            maxAge: 7 * 24 * 60 * 60 * 1000
-        });
-        return res.status(200).json({
-            message: "Login successful."
-        })
+        return res.status(200).json({ message: "Login successful." });
     } catch (error) {
         next(error);
     }
@@ -176,30 +93,18 @@ export const login = async (req, res, next) => {
  * - Clears JWT cookie from client browser
  * - Invalidates session on frontend (stateless backend)
  *
- * Cookie:
- * - httpOnly: true (secure cookie removal)
- * - secure: true in production only
- * - sameSite: none (matches login configuration)
- *
  * @returns {Object} 200 - Logout successful
  * @returns {Object} 500 - Server error
  */
 export const logout = async (req, res, next) => {
     try {
-        res.clearCookie("token", {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "none"
-        });
+        res.clearCookie("token", CLEAR_COOKIE_OPTIONS);
 
-        return res.status(200).json({
-            message: "Logged out successfully."
-        });
+        return res.status(200).json({ message: "Logged out successfully." });
     } catch (error) {
         next(error);
     }
 };
-
 
 /**
  * Initiate password reset for a user.
@@ -220,43 +125,14 @@ export const logout = async (req, res, next) => {
 export const forgotPassword = async (req, res, next) => {
     try {
         const { username } = req.body;
-        if (!username) {
-            return res.status(400).json({ message: "Username is required" });
-        }
 
-        const user = await UsersAuth.findOne({ username });
+        // Service handles lookup + token + email; controller stays unaware of whether the user exists
+        await initiatePasswordReset(username, process.env.FRONTEND_URL);
 
-        if (!user) {
-            return res.status(200).json({
-                message: "If the account exists, a reset link has been sent to the associated email."
-            });
-        }
-
-        const token = jwt.sign(
-            { userId: user._id },
-            process.env.JWT_SECRET,
-            { expiresIn: "15m" }
-        );
-
-        user.resetToken = token;
-        await user.save();
-
-        const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-
-        const emailResult = await sendPasswordResetEmail(
-            user.email,
-            user.username,
-            resetLink
-        );
-
-        if (emailResult && !emailResult.success) {
-            console.error(`[Warning] Reset email failed to send to ${user.username} (${user.email})`);
-        }
-
+        // Always return the same message to prevent account enumeration
         return res.status(200).json({
-            message: "If the account exists, a reset link has been sent to the associated email."
+            message: "If the account exists, a reset link has been sent to the associated email.",
         });
-
     } catch (error) {
         next(error);
     }
@@ -284,41 +160,9 @@ export const resetPassword = async (req, res, next) => {
     try {
         const { token, newPassword } = req.body;
 
-        if (!token || !newPassword) {
-            return res.status(400).json({
-                message: "Missing required fields"
-            });
-        }
+        await completePasswordReset(token, newPassword);
 
-        let decoded;
-        try {
-            decoded = jwt.verify(token, process.env.JWT_SECRET);
-        } catch (error) {
-            return res.status(400).json({
-                message: "Link is invalid or has expired"
-            });
-        }
-
-        const user = await UsersAuth.findById(decoded.userId);
-
-        if (!user) {
-            return res.status(404).json({
-                message: "User not found"
-            });
-        }
-
-        if (user.resetToken !== token) {
-            return res.status(400).json({ message: "Link is invalid or has expired" });
-        }
-
-        user.password = newPassword;
-        user.resetToken = null;
-        await user.save();
-
-        return res.status(200).json({
-            message: "Password reset successfully!"
-        });
-
+        return res.status(200).json({ message: "Password reset successfully!" });
     } catch (error) {
         next(error);
     }
