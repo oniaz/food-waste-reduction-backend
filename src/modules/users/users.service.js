@@ -37,6 +37,15 @@ export async function getCustomerProfile(customerId) {
     return customerData;
 }
 
+/**
+ * Returns the admin profile document.
+ */
+export async function getAdminProfile(authId) {
+    const adminData = await usersRepo.findAdminByAuthId(authId);
+    if (!adminData) throw new AppError("Admin profile not found", 404);
+    return adminData;
+}
+
 // ── Profile Updates ───────────────────────────────────────────────────────────
 
 /**

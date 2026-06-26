@@ -587,14 +587,14 @@ Returns the authenticated user's full profile. The response shape varies by role
 
 - **Vendor:** Full `Vendors` document merged with `UsersAuth` fields (`username`, `email`, `role`, `accountStatus`), plus a computed `vendorRating` = `rating.score / rating.totalRatingsNumber` (or `0` if no ratings yet). `password` and `resetToken` are excluded.
 - **Customer:** Full `Customers` document merged with `UsersAuth` fields. Same exclusions.
-- **Admin:** This endpoint returns a 403 for admin accounts — admins use their `authId` directly and have no separate profile document to return.
+- **Admin:** Full `Admin` profile document merged with `UsersAuth` fields. Same exclusions.
 
 #### Request Details
 
 | | |
 |---|---|
 | **Method & URL** | `GET /api/users/me` |
-| **Auth required** | Yes — roles: `customer`, `vendor` (admin blocked) |
+| **Auth required** | Yes — roles: `customer`, `vendor`, `admin` |
 | **Cookie** | `token=<JWT>` |
 
 **Request Body:** None.
@@ -668,15 +668,33 @@ Returns the authenticated user's full profile. The response shape varies by role
 }
 ```
 
+#### Success Response — `200 OK` (Admin)
+
+```json
+{
+  "success": true,
+  "adminData": {
+    "_id": "664a1f3e2b7c8d9e0f123457",
+    "authId": "663f8a1b2c3d4e5f6a7b8c9d",
+    "username": "masteradmin",
+    "email": "admin@foodwasteapp.com",
+    "role": "admin",
+    "accountStatus": "active",
+    "createdAt": "2024-05-19T10:22:00.000Z",
+    "updatedAt": "2024-05-20T09:00:00.000Z"
+  }
+}
+```
+
 #### Error Responses
 
 | Status | Scenario | Message |
 |---|---|---|
 | `401` | Missing or invalid JWT | `"Unauthorized: Authentication token is missing"` |
-| `403` | Role is `admin` | `"Forbidden: Only authorized vendors and customers can access this endpoint"` |
 | `404` | `UsersAuth` record not found | `"Account authentication credentials not found"` |
 | `404` | Vendor profile not found | `"Vendor profile not found"` |
 | `404` | Customer profile not found | `"Customer profile not found"` |
+| `404` | Admin profile not found | `"Admin profile not found"` |
 | `500` | Unexpected DB error | `"Internal server error"` |
 
 ---

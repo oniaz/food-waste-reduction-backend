@@ -2,6 +2,7 @@ import {
     getAuthRecord,
     getVendorProfile,
     getCustomerProfile,
+    getAdminProfile,
     updateVendorProfile,
     updateCustomerProfile,
     changeUserPassword,
@@ -59,6 +60,22 @@ export const getCurrentUser = async (req, res, next) => {
                 success: true,
                 customerData: {
                     ...customerData,
+                    username: userAuth.username,
+                    email: userAuth.email,
+                    role: userAuth.role,
+                    accountStatus: userAuth.accountStatus,
+                },
+            });
+        }
+
+        // Handle Admin Fetching
+        if (currentUserRole === "admin") {
+            const adminData = await getAdminProfile(authId);
+
+            return res.status(200).json({
+                success: true,
+                adminData: {
+                    ...adminData,
                     username: userAuth.username,
                     email: userAuth.email,
                     role: userAuth.role,

@@ -2,6 +2,7 @@ import UsersAuth from "../../models/usersAuth.model.js";
 import Vendors from "../../models/vendors.model.js";
 import Customers from "../../models/customers.model.js";
 import Order from "../../models/orders.model.js";
+import Admin from "../../models/admins.models.js";
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -10,6 +11,9 @@ export const findAuthById = (id) =>
 
 export const findAuthByIdWithPassword = (id) =>
     UsersAuth.findById(id);
+
+export const findAdminByAuthId = (authId) =>
+    Admin.findOne({ authId }).lean();
 
 export const activateIfIncomplete = (authId) =>
     UsersAuth.updateOne(
