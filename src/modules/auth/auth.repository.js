@@ -1,6 +1,7 @@
 import UsersAuth from "../../models/usersAuth.model.js";
 import Vendors from "../../models/vendors.model.js";
 import Customers from "../../models/customers.model.js";
+import Admin from "../../models/admins.models.js";
 
 // ── UsersAuth ─────────────────────────────────────────────────────────────────
 
@@ -31,5 +32,14 @@ export const findVendorByTaxNumber = (taxNumber) =>
 export const createVendor = (data, session) =>
     Vendors.create([data], { session });
 
+export const findVendorByAuthId = (authId) =>
+    Vendors.findOne({ authId });
+
 export const createCustomer = (data, session) =>
     Customers.create([data], { session });
+
+export const findCustomerByAuthId = (authId) =>
+    Customers.findOne({ authId });
+
+export const findAdminByAuthId = (authId) =>
+    Admin.findOne({ authId });
