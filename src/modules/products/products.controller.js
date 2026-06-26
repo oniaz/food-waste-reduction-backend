@@ -1,12 +1,12 @@
 import * as productService from "./products.service.js";
-import Products from "../../models/products.model.js";
 import * as recommendationService from "./products.recommendation.service.js";
+import { findProductById } from "./products.repository.js";
 import {
-  uploadToCloudinary,
-  deleteFromCloudinary,
+    uploadToCloudinary,
+    deleteFromCloudinary,
 } from "../../utils/cloudinaryHelper.js";
 import { CATEGORY_CONFIG } from "../../data/productCategories.js";
-import mongoose from "mongoose";
+
 /**
  * Get all products
  * @route GET /products
@@ -16,16 +16,13 @@ import mongoose from "mongoose";
  * @returns {JSON} List of products
  */
 export const getAll = async (req, res, next) => {
-  try {
-    const products = await productService.getAllProducts(req.query);
+    try {
+        const products = await productService.getAllProducts(req.query);
 
-    res.status(200).json({
-      success: true,
-      data: products,
-    });
-  } catch (error) {
-    next(error);
-  }
+        res.status(200).json({ success: true, data: products });
+    } catch (error) {
+        next(error);
+    }
 };
 
 /**
@@ -37,264 +34,159 @@ export const getAll = async (req, res, next) => {
  * @returns {JSON} Filtered products list
  */
 export const search = async (req, res, next) => {
-  try {
-    const products = await productService.searchProducts(req.query.q);
+    try {
+        const products = await productService.searchProducts(req.query.q);
 
-    res.json({
-      success: true,
-      data: products,
-    });
-  } catch (error) {
-    next(error);
-  }
+        res.json({ success: true, data: products });
+    } catch (error) {
+        next(error);
+    }
 };
 
 /**
  * Get product by ID
  * @route GET /products/:id
+ * Validation of ID format is handled by validateProductIdParam middleware.
  * @param {Object} req - Express request object (params: id)
  * @param {Object} res - Express response object
  * @param {Function} next - Next middleware
  * @returns {JSON} Single product object
  */
 export const getById = async (req, res, next) => {
-  try {
-    const { id } = req.params;
+    try {
+        const product = await productService.getProductById(req.params.id);
 
-    // validate ID first
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid product ID",
-      });
+        res.json({ success: true, data: product });
+    } catch (error) {
+        next(error);
     }
-
-    const product = await productService.getProductById(id);
-
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: product,
-    });
-  } catch (error) {
-    next(error);
-  }
 };
 
 /**
  * Create new product
  * @route POST /products
- * @param {Object} req - Express request object (body: product data, file: product image, user from auth)
+ * Auth, role, and field validation are handled by upstream middleware.
+ * vendorId is injected onto req.body by validateCreateProduct.
+ * @param {Object} req - Express request object (body: product data, file: product image)
  * @param {Object} res - Express response object
  * @param {Function} next - Next middleware
  * @returns {JSON} Created product
  */
 export const create = async (req, res, next) => {
-  try {
-    //user must be authenticated to create a product
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
+    try {
+        // Handle image upload — file was validated by uploadMiddleware already
+        if (req.file) {
+            const uploadResult = await uploadToCloudinary(req.file.buffer);
+            req.body.imgUrl = uploadResult.secure_url;
+            req.body.publicImgId = uploadResult.public_id;
+        }
+
+        const product = await productService.createProduct(req.body);
+
+        res.status(201).json({ success: true, data: product });
+    } catch (error) {
+        next(error);
     }
-
-    // check if the user is a customer, if so, deny access
-    if (req.user.role !== "vendor") {
-      return res.status(403).json({
-        success: false,
-        message: "Only vendors can create products",
-      });
-    }
-
-    // Assign the vendorId to the product being created
-    req.body.vendorId = req.user.id;
-
-    // Handle image upload if a file is provided
-    if (req.file) {
-      const uploadResult = await uploadToCloudinary(req.file.buffer);
-      req.body.imgUrl = uploadResult.secure_url;
-      req.body.publicImgId = uploadResult.public_id;
-    }
-
-    const product = await productService.createProduct(req.body);
-
-    res.status(201).json({
-      success: true,
-      data: product,
-    });
-  } catch (error) {
-    next(error);
-  }
 };
 
 /**
  * Update existing product
  * @route PUT /products/:id
- * @param {Object} req - Express request object (params: id, body: update data, file: optional new product image)
+ * Auth and role checks are handled by upstream middleware.
+ * Ownership check is handled by the service.
+ * @param {Object} req - Express request object (params: id, body: update data, file: optional image)
  * @param {Object} res - Express response object
  * @param {Function} next - Next middleware
  * @returns {JSON} Updated product
  */
 export const update = async (req, res, next) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
+    try {
+        if (req.file) {
+            // Fetch the current product doc to get the old publicImgId for Cloudinary cleanup.
+            // Static top-level import of findProductById (no dynamic import).
+            const existing = await findProductById(req.params.id);
+
+            if (existing) {
+                // Clean up the old image asset before uploading the replacement
+                await deleteFromCloudinary(existing.publicImgId);
+            }
+
+            const uploadResult = await uploadToCloudinary(req.file.buffer);
+            req.body.imgUrl = uploadResult.secure_url;
+            req.body.publicImgId = uploadResult.public_id;
+        }
+
+        const updatedProduct = await productService.updateProduct(
+            req.params.id,
+            req.body,
+            req.user.id
+        );
+
+        res.json({ success: true, data: updatedProduct });
+    } catch (error) {
+        next(error);
     }
-
-    // ✅ role check
-    if (req.user.role !== "vendor") {
-      return res.status(403).json({
-        success: false,
-        message: "Only vendors can update products",
-      });
-    }
-    const product = await Products.findById(req.params.id);
-
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
-    }
-
-    // check if the user is the owner of the product, if not, deny access
-    if (product.vendorId.toString() !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not allowed to update this product",
-      });
-    }
-    if (req.file) {
-      const uploadResult = await uploadToCloudinary(req.file.buffer);
-
-      // Clean up the old image asset using the new utility
-      await deleteFromCloudinary(product.publicImgId);
-
-      req.body.imgUrl = uploadResult.secure_url;
-      req.body.publicImgId = uploadResult.public_id;
-    }
-
-    const updatedProduct = await productService.updateProduct(
-      req.params.id,
-      req.body,
-    );
-
-    res.json({
-      success: true,
-      data: updatedProduct,
-    });
-  } catch (error) {
-    next(error);
-  }
 };
 
 /**
  * Delete product
  * @route DELETE /products/:id
+ * Auth and role checks are handled by upstream middleware.
+ * Ownership check and DB deletion are both handled by the service atomically.
  * @param {Object} req - Express request object (params: id)
  * @param {Object} res - Express response object
  * @param {Function} next - Next middleware
  * @returns {JSON} Deletion result message
  */
 export const remove = async (req, res, next) => {
-  try {
-    // ✅ auth check
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
+    try {
+        // Service verifies ownership, deletes from DB, and returns publicImgId for cleanup
+        const publicImgId = await productService.deleteProduct(req.params.id, req.user.id);
+
+        // Cloudinary cleanup happens after the DB delete succeeds
+        await deleteFromCloudinary(publicImgId);
+
+        res.json({ success: true, message: "Deleted successfully" });
+    } catch (error) {
+        next(error);
     }
-    // ✅ role check
-    if (req.user.role !== "vendor") {
-      return res.status(403).json({
-        success: false,
-        message: "Only vendors can delete products",
-      });
-    }
-    const product = await Products.findById(req.params.id);
-
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
-    }
-
-    // check if the user is the owner of the product, if not, deny access
-    if (product.vendorId.toString() !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not allowed to delete this product",
-      });
-    }
-
-    // Clean up asset from Cloudinary
-    await deleteFromCloudinary(product.publicImgId);
-
-    await productService.deleteProduct(req.params.id);
-
-    res.json({
-      success: true,
-      message: "Deleted successfully",
-    });
-  } catch (error) {
-    next(error);
-  }
 };
 
 /**
  * Recommend products based on current cart items
  * @route POST /products/recommendations
+ * cartItems validation is handled by validateRecommendCartItems middleware.
  * @param {Object} req - Express request object (body: cartItems array)
- * @param {Array<Object>} req.body.cartItems - Array of cart items used to generate recommendations
- * @param {string} req.body.cartItems[].category - Required non-empty category string for each cart item
- * @param {string} req.body.cartItems[].productName - Required non-empty product name string for each cart item
- * @param {Array<string>} [req.body.cartItems[].tags] - Optional non-empty tag strings for each cart item
  * @param {Object} res - Express response object
  * @param {Function} next - Next middleware
  * @returns {JSON} Recommendation list or empty result message
  */
 export const recommend = async (req, res, next) => {
-  try {
-    const { cartItems } = req.body; // Expecting an array from frontend
-    const suggestions = await recommendationService.getCartRecommendations(
-      cartItems,
-      req.user?.id,
-    );
-    if (suggestions.length === 0) {
-      return res.status(200).json({
-        success: true,
-        data: [],
-        message: "No recommendations available based on current cart items",
-      });
+    try {
+        const { cartItems } = req.body; // Expecting an array from frontend
+        const suggestions = await recommendationService.getCartRecommendations(
+            cartItems,
+            req.user?.id
+        );
+
+        if (suggestions.length === 0) {
+            return res.status(200).json({
+                success: true,
+                data: [],
+                message: "No recommendations available based on current cart items",
+            });
+        }
+
+        res.status(200).json({ success: true, data: suggestions });
+    } catch (error) {
+        next(error);
     }
-    res.status(200).json({
-      success: true,
-      data: suggestions,
-    });
-  } catch (error) {
-    next(error);
-  }
 };
 
 export const getCategories = async (req, res, next) => {
-  try {
-    return res.status(200).json({
-      success: true,
-      data: CATEGORY_CONFIG,
-    });
-  } catch (error) {
-    next(error);
-  }
+    try {
+        return res.status(200).json({ success: true, data: CATEGORY_CONFIG });
+    } catch (error) {
+        next(error);
+    }
 };
