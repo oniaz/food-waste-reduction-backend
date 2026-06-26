@@ -76,12 +76,31 @@ const hash = (plain) => bcrypt.hash(plain, 10);
 //   meat_seafood / bakery           →  7 days  → expiryDate ≥ today +  8
 //   frozen_food / snacks_desserts /
 //     drinks / pantry               → 30 days  → expiryDate ≥ today + 31
+const BUFFER_DAYS = {
+  dairy:           10,
+  meat_seafood:     7,
+  bakery:           7,
+  frozen_food:     30,
+  ready_meals:     10,
+  snacks_desserts: 30,
+  drinks:          30,
+  pantry:          30,
+};
+ 
 const daysFromNow = (n) => {
   const d = new Date();
   d.setDate(d.getDate() + n);
   return d;
 };
-
+ 
+// Mirrors the pre-save hook: validDate = expiryDate - bufferDays
+const calcValidDate = (category, expiryDate) => {
+  const buffer = BUFFER_DAYS[category] ?? 0;
+  const d = new Date(expiryDate);
+  d.setDate(d.getDate() - buffer);
+  return d;
+};
+ 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 async function seed() {
   const uri = process.env.MONGO_URI;
@@ -379,7 +398,8 @@ async function seed() {
       productName:   "Organic Whole Milk",
       price:         45,
       discount:      10,
-      expiryDate:    daysFromNow(15),
+      expiryDate:    daysFromNow(30),
+      validDate:     calcValidDate("dairy",           daysFromNow(30)),
       vendorId:      vendor1._id,
       quantity:      30,
       isDeliverable: true,
@@ -401,7 +421,8 @@ async function seed() {
       productName:   "Chicken Breast",
       price:         120,
       discount:      15,
-      expiryDate:    daysFromNow(10),
+      expiryDate:    daysFromNow(100),
+      validDate:     calcValidDate("meat_seafood",    daysFromNow(100)),
       vendorId:      vendor1._id,
       quantity:      20,
       isDeliverable: true,
@@ -423,7 +444,8 @@ async function seed() {
       productName:   "Extra Virgin Olive Oil",
       price:         220,
       discount:      5,
-      expiryDate:    daysFromNow(40),
+      expiryDate:    daysFromNow(100),
+      validDate:     calcValidDate("pantry",          daysFromNow(100)),
       vendorId:      vendor1._id,
       quantity:      50,
       isDeliverable: true,
@@ -445,7 +467,8 @@ async function seed() {
       productName:   "Orange Juice — 1L",
       price:         35,
       discount:      20,
-      expiryDate:    daysFromNow(40),
+      expiryDate:    daysFromNow(80),
+      validDate:     calcValidDate("drinks",          daysFromNow(80)),
       vendorId:      vendor1._id,
       quantity:      60,
       isDeliverable: true,
@@ -471,7 +494,8 @@ async function seed() {
       productName:   "Sourdough Loaf",
       price:         65,
       discount:      0,
-      expiryDate:    daysFromNow(10),
+      expiryDate:    daysFromNow(70),
+      validDate:     calcValidDate("bakery",          daysFromNow(70)),
       vendorId:      vendor2._id,
       quantity:      15,
       isDeliverable: false,
@@ -493,7 +517,8 @@ async function seed() {
       productName:   "Assorted Croissants (6-pack)",
       price:         80,
       discount:      25,
-      expiryDate:    daysFromNow(40),
+      expiryDate:    daysFromNow(60),
+      validDate:     calcValidDate("snacks_desserts", daysFromNow(60)),
       vendorId:      vendor2._id,
       quantity:      25,
       isDeliverable: true,
@@ -515,7 +540,8 @@ async function seed() {
       productName:   "Homestyle Lasagne",
       price:         95,
       discount:      10,
-      expiryDate:    daysFromNow(15),
+      expiryDate:    daysFromNow(50),
+      validDate:     calcValidDate("ready_meals",     daysFromNow(50)),
       vendorId:      vendor2._id,
       quantity:      12,
       isDeliverable: true,
@@ -541,7 +567,8 @@ async function seed() {
       productName:   "Frozen Mixed Vegetables 1kg",
       price:         55,
       discount:      15,
-      expiryDate:    daysFromNow(45),
+      expiryDate:    daysFromNow(50),
+      validDate:     calcValidDate("frozen_food",     daysFromNow(50)),
       vendorId:      vendor3._id,
       quantity:      40,
       isDeliverable: true,
@@ -563,7 +590,8 @@ async function seed() {
       productName:   "Fish Fingers (20-pack)",
       price:         130,
       discount:      20,
-      expiryDate:    daysFromNow(50),
+      expiryDate:    daysFromNow(60),
+      validDate:     calcValidDate("frozen_food",     daysFromNow(60)),
       vendorId:      vendor3._id,
       quantity:      30,
       isDeliverable: true,
@@ -585,7 +613,8 @@ async function seed() {
       productName:   "Frozen Koshary Portion",
       price:         40,
       discount:      5,
-      expiryDate:    daysFromNow(15),
+      expiryDate:    daysFromNow(70),
+      validDate:     calcValidDate("frozen_food",     daysFromNow(70)),
       vendorId:      vendor3._id,
       quantity:      18,
       isDeliverable: true,
@@ -611,7 +640,8 @@ async function seed() {
       productName:   "Granola Bars (12-pack)",
       price:         110,
       discount:      10,
-      expiryDate:    daysFromNow(40),
+      expiryDate:    daysFromNow(80),
+      validDate:     calcValidDate("snacks_desserts", daysFromNow(80)),
       vendorId:      vendor4._id,
       quantity:      35,
       isDeliverable: true,
@@ -633,7 +663,8 @@ async function seed() {
       productName:   "Mixed Nuts 500g",
       price:         180,
       discount:      0,
-      expiryDate:    daysFromNow(40),
+      expiryDate:    daysFromNow(90),
+      validDate:     calcValidDate("snacks_desserts", daysFromNow(90)),
       vendorId:      vendor4._id,
       quantity:      22,
       isDeliverable: true,
@@ -655,7 +686,8 @@ async function seed() {
       productName:   "Peanut Butter — Crunchy 500g",
       price:         95,
       discount:      12,
-      expiryDate:    daysFromNow(45),
+      expiryDate:    daysFromNow(50),
+      validDate:     calcValidDate("pantry", daysFromNow(50)),
       vendorId:      vendor4._id,
       quantity:      28,
       isDeliverable: true,
@@ -681,7 +713,8 @@ async function seed() {
       productName:   "Cold-Brew Coffee 500ml",
       price:         75,
       discount:      10,
-      expiryDate:    daysFromNow(40),
+      expiryDate:    daysFromNow(70),
+      validDate:     calcValidDate("drinks",          daysFromNow(70)),
       vendorId:      vendor5._id,
       quantity:      45,
       isDeliverable: true,
@@ -703,7 +736,8 @@ async function seed() {
       productName:   "Mango Smoothie 330ml",
       price:         40,
       discount:      15,
-      expiryDate:    daysFromNow(35),
+      expiryDate:    daysFromNow(70),
+      validDate:     calcValidDate("drinks",          daysFromNow(70)),
       vendorId:      vendor5._id,
       quantity:      55,
       isDeliverable: true,
@@ -725,7 +759,8 @@ async function seed() {
       productName:   "Sparkling Water 12-pack",
       price:         90,
       discount:      5,
-      expiryDate:    daysFromNow(50),
+      expiryDate:    daysFromNow(70),
+      validDate:     calcValidDate("drinks",          daysFromNow(70)),
       vendorId:      vendor5._id,
       quantity:      70,
       isDeliverable: true,
@@ -747,7 +782,8 @@ async function seed() {
       productName:   "Greek Yoghurt 200g",
       price:         30,
       discount:      20,
-      expiryDate:    daysFromNow(12),
+      expiryDate:    daysFromNow(100),
+      validDate:     calcValidDate("dairy",          daysFromNow(100)),
       vendorId:      vendor5._id,
       quantity:      38,
       isDeliverable: true,
