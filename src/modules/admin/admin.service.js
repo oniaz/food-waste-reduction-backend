@@ -1,5 +1,6 @@
 import AppError from "../../utils/AppError.js";
 import * as adminRepo from "./admin.repository.js";
+import { sendAccountStatusEmail } from "../../utils/mailer.js";
 
 // ── Pending Vendors ───────────────────────────────────────────────────────────
 
@@ -82,6 +83,12 @@ export async function updateVendorStatus(authId, vendorId, newStatus) {
         description: `Changed vendor with Id ${vendorId} status from '${previousStatus}' to '${newStatus}'.`,
     });
 
+    // Send status change notification email
+    const emailResult = await sendAccountStatusEmail(currentAuth.email, currentAuth.username, newStatus, "vendor");
+    if (emailResult && !emailResult.success) {
+        console.warn(`[Warning] Status notification email failed to send to vendor ${currentAuth.username} (${currentAuth.email})`);
+    }
+
     return {
         vendorId: vendorProfile._id,
         authId: updatedAuth._id,
@@ -145,6 +152,12 @@ export async function updateCustomerStatus(authId, customerId, newStatus) {
         action: logAction,
         description: `Changed customer with Id ${customerId} status from '${previousStatus}' to '${newStatus}'.`,
     });
+
+    // Send status change notification email
+    const emailResult = await sendAccountStatusEmail(currentAuth.email, currentAuth.username, newStatus, "customer");
+    if (emailResult && !emailResult.success) {
+        console.warn(`[Warning] Status notification email failed to send to customer ${currentAuth.username} (${currentAuth.email})`);
+    }
 
     return {
         customerId: customerProfile._id,

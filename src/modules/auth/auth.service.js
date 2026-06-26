@@ -5,7 +5,7 @@ import bcrypt from "bcrypt";
 import AppError from "../../utils/AppError.js";
 import { JWT_CONFIG, RESET_TOKEN_CONFIG } from "../../config/auth.js";
 import * as authRepo from "./auth.repository.js";
-import { sendPasswordResetEmail } from "../../utils/mailer.js";
+import { sendPasswordResetEmail, sendAccountStatusEmail } from "../../utils/mailer.js";
 
 // ── Registration ──────────────────────────────────────────────────────────────
 
@@ -50,6 +50,22 @@ export async function registerUser({ username, password, role, email, profileDat
         }
 
         await session.commitTransaction();
+
+        // ── Send Registration Emails ──────────────────────────────────────────
+        if (role === "vendor") {
+            // Vendors get the pending email
+            const emailResult = await sendAccountStatusEmail(newAuth.email, newAuth.username, "pending", "vendor");
+            if (emailResult && !emailResult.success) {
+                console.warn(`[Warning] Application email failed to send to registered vendor ${newAuth.username}`);
+            }
+        } else if (role === "customer") {
+            // Customers get an immediate registration confirmation email
+            const emailResult = await sendAccountStatusEmail(newAuth.email, newAuth.username, "active", "customer");
+            if (emailResult && !emailResult.success) {
+                console.warn(`[Warning] Welcome email failed to send to registered customer ${newAuth.username}`);
+            }
+        }
+
         return newAuth;
 
     } catch (err) {
