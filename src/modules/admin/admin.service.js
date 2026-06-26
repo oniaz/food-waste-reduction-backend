@@ -84,9 +84,9 @@ export async function updateVendorStatus(authId, vendorId, newStatus) {
     });
 
     // Send status change notification email
-    const emailResult = await sendAccountStatusEmail(currentAuth.email, currentAuth.username, newStatus);
+    const emailResult = await sendAccountStatusEmail(currentAuth.email, currentAuth.username, newStatus, "vendor");
     if (emailResult && !emailResult.success) {
-        console.warn(`[Warning] Status notification email failed to send to ${currentAuth.username} (${currentAuth.email})`);
+        console.warn(`[Warning] Status notification email failed to send to vendor ${currentAuth.username} (${currentAuth.email})`);
     }
 
     return {
@@ -154,9 +154,9 @@ export async function updateCustomerStatus(authId, customerId, newStatus) {
     });
 
     // Send status change notification email
-    const emailResult = await sendAccountStatusEmail(currentAuth.email, currentAuth.username, newStatus);
+    const emailResult = await sendAccountStatusEmail(currentAuth.email, currentAuth.username, newStatus, "customer");
     if (emailResult && !emailResult.success) {
-        console.warn(`[Warning] Status notification email failed to send to ${currentAuth.username} (${currentAuth.email})`);
+        console.warn(`[Warning] Status notification email failed to send to customer ${currentAuth.username} (${currentAuth.email})`);
     }
 
     return {
