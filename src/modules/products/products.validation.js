@@ -145,45 +145,12 @@ export const validateRecommendCartItems = (req, res, next) => {
         return res.status(400).json({ success: false, message: "cartItems cannot be empty" });
     }
 
-    for (const [index, item] of cartItems.entries()) {
-        if (!item || typeof item !== "object" || Array.isArray(item)) {
+    for (const [index, id] of cartItems.entries()) {
+        if (typeof id !== "string" || !/^[a-fA-F0-9]{24}$/.test(id)) {
             return res.status(400).json({
                 success: false,
-                message: `cartItems[${index}] must be an object`,
+                message: `cartItems[${index}] must be a valid 24-character hex product ID`,
             });
-        }
-
-        if (typeof item.category !== "string" || item.category.trim() === "") {
-            return res.status(400).json({
-                success: false,
-                message: `cartItems[${index}].category is required and must be a non-empty string`,
-            });
-        }
-
-        if (typeof item.productName !== "string" || item.productName.trim() === "") {
-            return res.status(400).json({
-                success: false,
-                message: `cartItems[${index}].productName is required and must be a non-empty string`,
-            });
-        }
-
-        if (item.tags !== undefined && !Array.isArray(item.tags)) {
-            return res.status(400).json({
-                success: false,
-                message: `cartItems[${index}].tags must be an array when provided`,
-            });
-        }
-
-        if (Array.isArray(item.tags)) {
-            const invalidTag = item.tags.find(
-                (tag) => typeof tag !== "string" || tag.trim() === ""
-            );
-            if (invalidTag !== undefined) {
-                return res.status(400).json({
-                    success: false,
-                    message: `cartItems[${index}].tags must contain only non-empty strings`,
-                });
-            }
         }
     }
 
