@@ -187,7 +187,7 @@ async function seed() {
       taxNumber:   "TAX-001-GGC",
       pickupTime:  { days: ["Saturday","Sunday","Monday","Tuesday","Wednesday"], from: "09:00", to: "17:00" },
       moneyOwed:   0,
-      rating:      { score: 4.5, totalRatingsNumber: 20 },
+      rating:      { score: 90, totalRatingsNumber: 20 },
       authId:      v1Auth._id,
     },
 
@@ -206,7 +206,7 @@ async function seed() {
       taxNumber:   "TAX-002-BH",
       pickupTime:  { days: ["Saturday","Sunday","Tuesday","Thursday"], from: "08:00", to: "14:00" },
       moneyOwed:   0,
-      rating:      { score: 4.8, totalRatingsNumber: 35 },
+      rating:      { score: 168, totalRatingsNumber: 35 },
       authId:      v2Auth._id,
     },
 
@@ -227,7 +227,7 @@ async function seed() {
       taxNumber:   "TAX-003-FB",
       pickupTime:  { days: ["Sunday","Monday","Wednesday","Friday"], from: "10:00", to: "18:00" },
       moneyOwed:   200,
-      rating:      { score: 4.2, totalRatingsNumber: 14 },
+      rating:      { score: 58, totalRatingsNumber: 14 },
       authId:      v3Auth._id,
     },
 
@@ -246,7 +246,7 @@ async function seed() {
       taxNumber:   "TAX-004-SW",
       pickupTime:  { days: ["Monday","Tuesday","Wednesday","Thursday","Saturday"], from: "11:00", to: "20:00" },
       moneyOwed:   0,
-      rating:      { score: 3.9, totalRatingsNumber: 8 },
+      rating:      { score: 28, totalRatingsNumber: 8 },
       authId:      v4Auth._id,
     },
 
@@ -271,7 +271,7 @@ async function seed() {
       taxNumber:   "TAX-005-DS",
       pickupTime:  { days: ["Saturday","Sunday","Monday","Wednesday","Friday"], from: "09:00", to: "21:00" },
       moneyOwed:   50,
-      rating:      { score: 4.6, totalRatingsNumber: 27 },
+      rating:      { score: 124, totalRatingsNumber: 27 },
       authId:      v5Auth._id,
     },
   ]);
