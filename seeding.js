@@ -390,14 +390,15 @@ async function seed() {
         "healthy choice",             // organic, unprocessed
         "single-serve portion",       // sold per litre
       ],
-      ...img(0),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782437797/8fe8b0ab-b1fc-455b-9ab3-37fe605da07e.png",
+      publicImgId:"8fe8b0ab-b1fc-455b-9ab3-37fe605da07e",
     },
 
     // P1 — Fresh Chicken Breast
     // category: meat_seafood  → buffer 7 days → expiryDate set +10 days out ✓
     {
       category:      "meat_seafood",
-      productName:   "Fresh Chicken Breast",
+      productName:   "Chicken Breast",
       price:         120,
       discount:      15,
       expiryDate:    daysFromNow(10),
@@ -411,7 +412,8 @@ async function seed() {
         "requires continuous fridge", // fresh protein must stay cold
         "clearance deal",             // discounted near best-before
       ],
-      ...img(1),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782437954/4a0cace2-2d78-4821-be11-c1019dd89e0a.png",
+      publicImgId:"4a0cace2-2d78-4821-be11-c1019dd89e0a",
     },
 
     // P2 — Extra Virgin Olive Oil
@@ -432,7 +434,8 @@ async function seed() {
         "lunch helper",               // used in cooking daily meals
         "family pack / bulk",         // 750 ml serves a household
       ],
-      ...img(2),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782438028/f113e397-7c0b-4fae-95ea-53659d841561.png",
+      publicImgId:"f113e397-7c0b-4fae-95ea-53659d841561",
     },
 
     // P3 — Orange Juice 1L
@@ -453,7 +456,8 @@ async function seed() {
         "healthy choice",             // natural vitamins
         "school lunchbox snack",      // kid-friendly drink
       ],
-      ...img(0),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782438115/718f3c33-0b36-444e-ae2b-911fa90ff79c.png",
+      publicImgId:"718f3c33-0b36-444e-ae2b-911fa90ff79c",
     },
 
     // ══════════════════════════════════════════════════════════════════════
@@ -478,7 +482,8 @@ async function seed() {
         "ready to eat",               // no prep needed
         "savory & salty",             // classic sourdough flavour profile
       ],
-      ...img(1),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782438192/7bf3bf97-100a-4352-be78-b9d40553a13b.png",
+      publicImgId:"7bf3bf97-100a-4352-be78-b9d40553a13b",
     },
 
     // P5 — Assorted Croissants 6-pack
@@ -499,7 +504,8 @@ async function seed() {
         "ready to eat",               // grab and go
         "clearance deal",             // 25 % off surplus batch
       ],
-      ...img(2),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782438239/82ee7018-f3ef-4d58-9222-728ca533e03e.png",
+      publicImgId:"82ee7018-f3ef-4d58-9222-728ca533e03e",
     },
 
     // P6 — Homestyle Lasagne
@@ -520,7 +526,8 @@ async function seed() {
         "requires continuous fridge", // chilled ready meal
         "family pack / bulk",         // 800 g serves two
       ],
-      ...img(0),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782438293/7477bd5f-c028-4468-aa57-4711dea63427.png",
+      publicImgId:"7477bd5f-c028-4468-aa57-4711dea63427",
     },
 
     // ══════════════════════════════════════════════════════════════════════
@@ -545,7 +552,8 @@ async function seed() {
         "vegetarian",                 // 100 % plant-based
         "healthy choice",             // no additives
       ],
-      ...img(1),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782438377/cdf9bd52-2170-428c-95ec-14ebe9319757.png",
+      publicImgId:"cdf9bd52-2170-428c-95ec-14ebe9319757",
     },
 
     // P8 — Fish Fingers 20-pack
@@ -566,7 +574,8 @@ async function seed() {
         "school lunchbox snack",      // kid-friendly finger food
         "family pack / bulk",         // 20-pack family size
       ],
-      ...img(2),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782438441/162d3e74-0964-4ab3-84cb-85bb890cf070.png",
+      publicImgId:"162d3e74-0964-4ab3-84cb-85bb890cf070",
     },
 
     // P9 — Frozen Koshary Portion
@@ -587,7 +596,8 @@ async function seed() {
         "single-serve portion",       // individual portion pack
         "siamee friendly",            // no meat, suits fasting days
       ],
-      ...img(0),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782438612/0e552531-9d95-403a-8437-e0756cdd74cb.png",
+      publicImgId:"0e552531-9d95-403a-8437-e0756cdd74cb",
     },
 
     // ══════════════════════════════════════════════════════════════════════
@@ -612,7 +622,8 @@ async function seed() {
         "healthy choice",             // oat-based, low sugar
         "ready to eat",               // no prep needed
       ],
-      ...img(1),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782438685/6b990ffd-5d9f-4014-a11f-a62777216b79.png",
+      publicImgId:"6b990ffd-5d9f-4014-a11f-a62777216b79",
     },
 
     // P11 — Mixed Nuts 500g
@@ -633,7 +644,8 @@ async function seed() {
         "crunchy bite",               // classic nut texture
         "healthy choice",             // natural protein and fats
       ],
-      ...img(2),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782438859/433d6df5-d1d2-4c27-8f88-1e02dc2181ed.png",
+      publicImgId:"433d6df5-d1d2-4c27-8f88-1e02dc2181ed",
     },
 
     // P12 — Peanut Butter Crunchy 500g
@@ -654,7 +666,8 @@ async function seed() {
         "sugar-free",                 // no added sugar
         "crunchy bite",               // crunchy variant
       ],
-      ...img(0),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782442444/ad8e7e65-5186-47ef-8fea-67f05328cd75.png",
+      publicImgId:"ad8e7e65-5186-47ef-8fea-67f05328cd75",
     },
 
     // ══════════════════════════════════════════════════════════════════════
@@ -679,7 +692,8 @@ async function seed() {
         "requires continuous fridge", // chilled product
         "single-serve portion",       // 500 ml individual bottle
       ],
-      ...img(1),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782438938/d0adf50f-5cb6-47eb-91b2-50f713d683b7.png",
+      publicImgId:"d0adf50f-5cb6-47eb-91b2-50f713d683b7",
     },
 
     // P14 — Mango Smoothie 330ml
@@ -700,7 +714,8 @@ async function seed() {
         "ready to eat",               // ready to drink
         "single-serve portion",       // 330 ml single can
       ],
-      ...img(2),
+      imgUrl:"https://res.cloudinary.com/dx89qnzgl/image/upload/v1782439011/4f455d8a-f6e2-40dd-bf7c-9790a89dfddc.png",
+      publicImgId:"4f455d8a-f6e2-40dd-bf7c-9790a89dfddc",
     },
 
     // P15 — Sparkling Water 12-pack
@@ -721,7 +736,8 @@ async function seed() {
         "family pack / bulk",         // 12-pack multipack
         "healthy choice",             // zero-calorie hydration
       ],
-      ...img(0),
+      imgUrl: "https://res.cloudinary.com/dx89qnzgl/image/upload/v1782439090/11b5de0d-ae5d-4396-a73f-f05038df9968.png",
+      publicImgId: "11b5de0d-ae5d-4396-a73f-f05038df9968",
     },
 
     // P16 — Greek Yoghurt 200g
@@ -742,7 +758,9 @@ async function seed() {
         "healthy choice",             // high protein, probiotic
         "single-serve portion",       // 200 g individual cup
       ],
-      ...img(1),
+      imgUrl: "https://res.cloudinary.com/dx89qnzgl/image/upload/v1782424786/food-waste-reduction/products/gffslyjg84zohldzuhti.png",
+      publicImgId: "food-waste-reduction/products/gffslyjg84zohldzuhti",
+
     },
   ]);
 
