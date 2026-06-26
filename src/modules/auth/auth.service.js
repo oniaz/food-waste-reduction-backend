@@ -1,12 +1,11 @@
-import nodemailer from 'nodemailer';
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import nodemailer from "nodemailer";
 
-import UsersAuth from "../../models/usersAuth.model.js";
-import Vendors from "../../models/vendors.model.js";
-import Customers from "../../models/customers.model.js";
+import AppError from "../../utils/AppError.js";
 import { JWT_CONFIG, RESET_TOKEN_CONFIG } from "../../config/auth.js";
+import * as authRepo from "./auth.repository.js";
 
 // ── Registration ──────────────────────────────────────────────────────────────
 
@@ -16,23 +15,40 @@ export async function registerUser({ username, password, role, email, profileDat
 
     try {
         if (role === "customer") {
-            const existingCustomer = await UsersAuth.findOne({ email, role: "customer" }).session(session);
-            if (existingCustomer) throw { status: 400, message: "Customer account already exists with this email. Only one customer account per email is allowed." };
+            const existingCustomer = await authRepo.findAuthByEmail(email, "customer", session);
+            if (existingCustomer) {
+                throw new AppError(
+                    "Customer account already exists with this email. Only one customer account per email is allowed.",
+                    400
+                );
+            }
+        }
+
+        // Duplicate username check — business rule that lives in the service
+        const existingUsername = await authRepo.findUsernameExists(username);
+        if (existingUsername) {
+            throw new AppError("Username already exists.", 400);
+        }
+
+        // Duplicate tax number check for vendors — business rule that lives in the service
+        if (role === "vendor") {
+            const { taxNumber } = profileData;
+            const taxExists = await authRepo.findVendorByTaxNumber(taxNumber);
+            if (taxExists) throw new AppError("Tax number already in use.", 400);
         }
 
         const accountStatus = role === "vendor" ? "pending" : "active";
-        const [newAuth] = await UsersAuth.create(
-            [{
-                username, password, role, email, accountStatus
-            }],
-            { session }
+        const [newAuth] = await authRepo.createAuth(
+            { username, password, role, email, accountStatus },
+            session
         );
 
         if (role === "vendor") {
-            await Vendors.create([{ ...profileData, authId: newAuth._id }], { session });
+            await authRepo.createVendor({ ...profileData, authId: newAuth._id }, session);
         } else if (role === "customer") {
-            await Customers.create([{ ...profileData, authId: newAuth._id }], { session });
+            await authRepo.createCustomer({ ...profileData, authId: newAuth._id }, session);
         }
+
         await session.commitTransaction();
         return newAuth;
 
@@ -51,11 +67,12 @@ export async function registerUser({ username, password, role, email, profileDat
  * Cookie setting is handled by the controller — services stay transport-agnostic.
  */
 export async function loginUser(username, password) {
-    const user = await UsersAuth.findOne({ username: username.trim() });
-    if (!user) return null;
+    const user = await authRepo.findAuthByUsername(username.trim());
+
+    if (!user) throw new AppError("Invalid username or password.", 400);
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return null;
+    if (!isMatch) throw new AppError("Invalid username or password.", 400);
 
     const token = jwt.sign(
         { sub: user._id, role: user.role },
@@ -70,11 +87,12 @@ export async function loginUser(username, password) {
 
 /**
  * Generates a short-lived reset token, persists it to the user record, and sends the email.
- * Returns the user document if found, or null if not found.
+ * Returns silently when the user is not found — caller always sends the same generic 200.
  */
 export async function initiatePasswordReset(username, frontendUrl) {
-    const user = await UsersAuth.findOne({ username });
-    if (!user) return null; // Caller always returns the same generic 200 — no leak
+    // findAuthByUsername returns a full document — safe to mutate and .save()
+    const user = await authRepo.findAuthByUsername(username);
+    if (!user) return; // Intentional no-op — prevents account enumeration
 
     const token = jwt.sign(
         { userId: user._id },
@@ -83,46 +101,40 @@ export async function initiatePasswordReset(username, frontendUrl) {
     );
 
     user.resetToken = token;
-    await user.save();
+    await authRepo.saveAuth(user);
 
     const resetLink = `${frontendUrl}/reset-password?token=${token}`;
 
-    const emailResult = await sendPasswordResetEmail(
-        user.email,
-        user.username,
-        resetLink
-    );
+    const emailResult = await sendPasswordResetEmail(user.email, user.username, resetLink);
 
     if (emailResult && !emailResult.success) {
         console.error(`[Warning] Reset email failed to send to ${user.username} (${user.email})`);
     }
-
-    return user;
 }
 
 /**
  * Validates a reset token, applies the new password, and clears the token.
+ * Uses findAuthByIdAsDocument to ensure .save() is available on the returned object.
  */
 export async function completePasswordReset(token, newPassword) {
     let decoded;
     try {
         decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch {
-        return { error: "Link is invalid or has expired" };
+        throw new AppError("Link is invalid or has expired", 400);
     }
 
-    const user = await UsersAuth.findById(decoded.userId);
-    if (!user) return { error: "not_found" };
+    // findAuthByIdAsDocument returns a full Mongoose document so we can call .save()
+    const user = await authRepo.findAuthByIdAsDocument(decoded.userId);
+    if (!user) throw new AppError("User not found", 404);
 
     if (user.resetToken !== token) {
-        return { error: "Link is invalid or has expired" };
+        throw new AppError("Link is invalid or has expired", 400);
     }
 
     user.password = newPassword;
     user.resetToken = null;
-    await user.save();
-
-    return { success: true };
+    await authRepo.saveAuth(user);
 }
 
 // ── Email Transport ───────────────────────────────────────────────────────────
@@ -145,7 +157,7 @@ export const sendEmail = async ({ to, subject, html }) => {
         });
 
         if (info.rejected && info.rejected.length > 0) {
-            console.warn(`[Nodemailer] Email rejected for: ${info.rejected.join(', ')}`);
+            console.warn(`[Nodemailer] Email rejected for: ${info.rejected.join(", ")}`);
         }
 
         return { success: true, info };
@@ -156,7 +168,6 @@ export const sendEmail = async ({ to, subject, html }) => {
 };
 
 export const sendPasswordResetEmail = async (email, name, resetLink) => {
-
     return sendEmail({
         to: email,
         subject: "Password Reset Request",

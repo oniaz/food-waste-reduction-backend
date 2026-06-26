@@ -1,15 +1,9 @@
-import UsersAuth from "../../models/usersAuth.model.js";
-import {
-    validateUsername, validateEmail, validatePassword, validateRole,
-    validatePhoneNumber, validateAddress, validateShopName, validateTaxNumber, validateName
-} from "../../utils/userDataValidators.js";
 import {
     registerUser,
     loginUser,
     initiatePasswordReset,
     completePasswordReset,
-} from "./auth.services.js";
-import Vendors from "../../models/vendors.model.js";
+} from "./auth.service.js";
 import { AUTH_COOKIE_OPTIONS, CLEAR_COOKIE_OPTIONS } from "../../config/auth.js";
 
 /**
@@ -39,57 +33,11 @@ import { AUTH_COOKIE_OPTIONS, CLEAR_COOKIE_OPTIONS } from "../../config/auth.js"
  */
 export const register = async (req, res, next) => {
     try {
-        let { username, password, role, email, ...profileData } = req.body;
-
-        if (!username || !password || !role || !email) {
-            return res.status(400).json({
-                message: "All fields are required: username, email, password, role."
-            });
-        }
-
-        username = username.trim();
-        email = email.trim().toLowerCase();
-        role = role?.trim().toLowerCase();
-
-        const roleError = validateRole(role);
-        const usernameError = validateUsername(username);
-        const emailError = validateEmail(email);
-        const passwordError = validatePassword(password);
-
-        const validationError = roleError || usernameError || emailError || passwordError;
-        if (validationError) return res.status(400).json({ message: validationError });
-
-
-        const existingUser = await UsersAuth.findOne({ username });
-        if (existingUser) {
-            return res.status(400).json({ message: "Username already exists." });
-        }
-
-        if (role === "vendor") {
-            const { shopName, phoneNumber, taxNumber, address } = profileData;
-            const err =
-                validateShopName(shopName) ||
-                validatePhoneNumber(phoneNumber) ||
-                validateTaxNumber(taxNumber) ||
-                validateAddress(address);
-            if (err) return res.status(400).json({ message: err });
-            if (await Vendors.findOne({ taxNumber: taxNumber.trim() }))
-                return res.status(400).json({ message: "Tax number already in use." });
-        }
-
-        if (role === "customer") {
-            const { name, phoneNumber, address } = profileData;
-            const err =
-                validateName(name) ||
-                validatePhoneNumber(phoneNumber) ||
-                validateAddress(address);
-            if (err) return res.status(400).json({ message: err });
-        }
+        const { username, password, role, email, ...profileData } = req.body;
 
         await registerUser({ username, password, role, email, profileData });
 
         return res.status(201).json({ message: "User registered successfully." });
-
     } catch (error) {
         next(error);
     }
@@ -124,25 +72,13 @@ export const register = async (req, res, next) => {
  */
 export const login = async (req, res, next) => {
     try {
-        let { username, password } = req.body;
-
-        if (!username || !password) {
-            return res.status(400).json({
-                message: "Username and password are required."
-            });
-        }
+        const { username, password } = req.body;
 
         const token = await loginUser(username, password);
 
-        if (!token) {
-            return res.status(400).json({ message: "Invalid username or password." });
-        }
-
         res.cookie("token", token, AUTH_COOKIE_OPTIONS);
 
-        return res.status(200).json({
-            message: "Login successful."
-        })
+        return res.status(200).json({ message: "Login successful." });
     } catch (error) {
         next(error);
     }
@@ -164,14 +100,11 @@ export const logout = async (req, res, next) => {
     try {
         res.clearCookie("token", CLEAR_COOKIE_OPTIONS);
 
-        return res.status(200).json({
-            message: "Logged out successfully."
-        });
+        return res.status(200).json({ message: "Logged out successfully." });
     } catch (error) {
         next(error);
     }
 };
-
 
 /**
  * Initiate password reset for a user.
@@ -192,18 +125,14 @@ export const logout = async (req, res, next) => {
 export const forgotPassword = async (req, res, next) => {
     try {
         const { username } = req.body;
-        if (!username) {
-            return res.status(400).json({ message: "Username is required" });
-        }
 
         // Service handles lookup + token + email; controller stays unaware of whether the user exists
         await initiatePasswordReset(username, process.env.FRONTEND_URL);
 
         // Always return the same message to prevent account enumeration
         return res.status(200).json({
-            message: "If the account exists, a reset link has been sent to the associated email."
+            message: "If the account exists, a reset link has been sent to the associated email.",
         });
-
     } catch (error) {
         next(error);
     }
@@ -231,25 +160,9 @@ export const resetPassword = async (req, res, next) => {
     try {
         const { token, newPassword } = req.body;
 
-        if (!token || !newPassword) {
-            return res.status(400).json({
-                message: "Missing required fields"
-            });
-        }
+        await completePasswordReset(token, newPassword);
 
-        const result = await completePasswordReset(token, newPassword);
-
-        if (result.error === "not_found") {
-            return res.status(404).json({ message: "User not found" });
-        }
-        if (result.error) {
-            return res.status(400).json({ message: result.error });
-        }
-
-        return res.status(200).json({
-            message: "Password reset successfully!"
-        });
-
+        return res.status(200).json({ message: "Password reset successfully!" });
     } catch (error) {
         next(error);
     }

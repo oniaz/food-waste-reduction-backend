@@ -1,4 +1,5 @@
 import { sendJsonResponse } from '../utils/response.js';
+import AppError from '../utils/AppError.js';
 
 export const notFoundMiddleware = (req, res) => {
     sendJsonResponse(res, 404, {
@@ -8,6 +9,11 @@ export const notFoundMiddleware = (req, res) => {
 
 
 export const errorMiddleware = (err, req, res, next) => {
+    // AppError instances carry their own status code and a safe user-facing message
+    if (err instanceof AppError) {
+        return sendJsonResponse(res, err.statusCode, { message: err.message });
+    }
+
     let statusCode = err.statusCode || err.status || 500;
     let message = statusCode >= 500 ? 'Internal server error' : (err.message || 'Request failed');
 

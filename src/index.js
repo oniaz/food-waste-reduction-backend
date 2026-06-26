@@ -12,7 +12,7 @@ import usersRoutes from "./modules/users/users.routes.js";
 import ordersRoutes from "./modules/orders/orders.routes.js";
 import productsRoutes from "./modules/products/products.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
-import locationsRoutes from "./modules/locations/locations.routes.js"
+import locationsRoutes from "./modules/locations/locations.routes.js";
 import {
   notFoundMiddleware,
   errorMiddleware,
@@ -44,10 +44,10 @@ await connectDB();
 
 // 3. Home route
 app.get("/", (req, res) => {
-  res.json({ message: "Welcome to the Food Waste Reduction API!" });
+  res.json({ message: "Welcome to the Waste Reduction API!" });
 });
 // 4. Rate limit
-app.use(globalLimiter)
+app.use(globalLimiter);
 // 5. Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);

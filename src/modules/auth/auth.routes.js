@@ -1,8 +1,12 @@
 import express from "express";
-import {register, login, logout , forgotPassword, resetPassword } from "./auth.controller.js";
+import { register, login, logout, forgotPassword, resetPassword } from "./auth.controller.js";
+import {
+    validateRegister,
+    validateLogin,
+    validateForgotPassword,
+    validateResetPassword,
+} from "./auth.validation.js";
 import authenticate from "../../middleware/authentication.middleware.js";
-import authorizeRole from "../../middleware/authorization.middleware.js";
-import authorizeStatus from "../../middleware/status.middleware.js";
 import { authLimiter } from "../../middleware/rateLimit.middleware.js";
 
 const router = express.Router();
@@ -13,14 +17,14 @@ const router = express.Router();
 // POST /auth/forgot-password | Public | send password reset email/token
 // POST /auth/reset-password | Public | reset password using valid token
 
-router.post("/login",authLimiter, login);
+router.post("/login", authLimiter, validateLogin, login);
 
-router.post("/register", register);
+router.post("/register", validateRegister, register);
 
 router.post("/logout", authenticate, logout);
 
-router.post("/forgot-password", forgotPassword);
+router.post("/forgot-password", validateForgotPassword, forgotPassword);
 
-router.post("/reset-password", resetPassword);
+router.post("/reset-password", validateResetPassword, resetPassword);
 
 export default router;
