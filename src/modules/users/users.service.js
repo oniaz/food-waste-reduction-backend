@@ -105,8 +105,7 @@ export async function changeUserPassword(userId, role, oldPassword, newPassword)
     if (!userAuth) throw new AppError("Authentication record not found", 404);
 
     const isMatch = await bcrypt.compare(oldPassword, userAuth.password);
-    if (!isMatch) throw new AppError("Can not change password", 400);
-
+    if (!isMatch) throw new AppError("Current password is incorrect", 400);
     userAuth.password = newPassword;
     await userAuth.save();
 }

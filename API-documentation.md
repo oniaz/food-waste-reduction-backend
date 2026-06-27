@@ -873,7 +873,7 @@ PATCH /api/users/change-password
 |---|---|---|
 | `400` | `oldPassword` or `newPassword` missing | `"Bad Request: Missing required parameters"` |
 | `400` | Either field is not a string | `"Bad Request: Password fields must be valid text strings."` |
-| `400` | `oldPassword` does not match stored hash | `"Can not change password"` |
+| `400` | `oldPassword` does not match stored hash | `"Current password is incorrect"` |
 | `401` | Missing or invalid JWT | `"Unauthorized: Authentication token is missing"` |
 | `403` | Role is `admin` | `"Forbidden: Unauthorized access"` |
 | `404` | `UsersAuth` record not found | `"Authentication record not found"` |
