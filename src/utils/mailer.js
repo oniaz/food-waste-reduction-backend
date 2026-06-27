@@ -2,11 +2,15 @@ import nodemailer from "nodemailer";
 
 // ── Email Transport ───────────────────────────────────────────────────────────
 
+const emailService = process.env.NODEMAILER_EMAIL_SERVICE || process.env.EMAIL_SERVICE;
+const emailUser = process.env.NODEMAILER_USERNAME || process.env.EMAIL || process.env.EMAIL_USER;
+const emailPass = process.env.NODEMAILER_PASS || process.env.EMAIL_PASS;
+
 const transporter = nodemailer.createTransport({
-    service: process.env.NODEMAILER_EMAIL_SERVICE,
+    service: emailService,
     auth: {
-        user: process.env.NODEMAILER_USERNAME,
-        pass: process.env.NODEMAILER_PASS,
+        user: emailUser,
+        pass: emailPass,
     },
 });
 
@@ -25,7 +29,7 @@ export const sendEmail = async ({ to, subject, html, title, raw = false }) => {
     try {
         const finalHtml = raw ? html : getEmailLayout(title || subject, html);
         const info = await transporter.sendMail({
-            from: process.env.NODEMAILER_USERNAME,
+            from: emailUser,
             to,
             subject,
             html: finalHtml,
