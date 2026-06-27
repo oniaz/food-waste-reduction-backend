@@ -154,20 +154,19 @@ export async function initiatePasswordReset(username, frontendUrl) {
 
     const resetLink = `${frontendUrl}/reset-password?token=${token}`;
 
-    sendPasswordResetEmail(user.email, user.username, resetLink)
-        .then((emailResult) => {
-            if (emailResult && !emailResult.success) {
-                console.error(
-                    `[Warning] Reset email failed to send to ${user.username} (${user.email})`
-                );
-                console.error("Email details:", emailResult.error);
-            } else {
-                console.log("email sent successfully")
-            }
-        })
-        .catch((err) => {
-            console.error("[Email Error]", err);
-        });
+    try {
+        const emailResult = await sendPasswordResetEmail(user.email, user.username, resetLink);
+        if (emailResult && !emailResult.success) {
+            console.error(
+                `[Warning] Reset email failed to send to ${user.username} (${user.email})`
+            );
+            console.error("Email details:", emailResult.error);
+        } else {
+            console.log("email sent successfully")
+        }
+    } catch (err) {
+        console.error("[Email Error]", err);
+    }
 }
 
 /**
