@@ -1,17 +1,16 @@
 import nodemailer from "nodemailer";
-import dns from "node:dns";
-
-dns.setDefaultResultOrder("ipv4first");
 
 // ── Email Transport ───────────────────────────────────────────────────────────
 
+const emailService = process.env.NODEMAILER_EMAIL_SERVICE || process.env.EMAIL_SERVICE;
+const emailUser = process.env.NODEMAILER_USERNAME || process.env.EMAIL || process.env.EMAIL_USER;
+const emailPass = process.env.NODEMAILER_PASS || process.env.EMAIL_PASS;
+
 const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false,
+    service: emailService,
     auth: {
-        user: process.env.NODEMAILER_USERNAME,
-        pass: process.env.NODEMAILER_PASS,
+        user: emailUser,
+        pass: emailPass,
     },
 });
 
@@ -39,7 +38,7 @@ export const sendEmail = async ({ to, subject, html, title, raw = false }) => {
     try {
         const finalHtml = raw ? html : getEmailLayout(title || subject, html);
         const info = await transporter.sendMail({
-            from: process.env.NODEMAILER_USERNAME,
+            from: emailUser,
             to,
             subject,
             html: finalHtml,
@@ -62,8 +61,13 @@ export const sendEmail = async ({ to, subject, html, title, raw = false }) => {
                 response: error.response,
                 responseCode: error.responseCode,
             },
+<<<<<<< HEAD
     };
 }
+=======
+        };
+    }
+>>>>>>> origin/main
 };
 
 export const sendPasswordResetEmail = async (email, name, resetLink) => {
@@ -107,7 +111,6 @@ export const sendAccountStatusEmail = async (email, username, newStatus, role = 
     let emailSubject = "Account Status Updated";
     let headingText = "Your account status has been updated.";
 
-    // ── SHARED STATUS LOGIC (Both Customers & Vendors) ────────────────────────
     if (newStatus === "suspended") {
         emailSubject = "Account Suspended";
         headingText = `An administrator has suspended your ${role} account.`;
@@ -121,13 +124,11 @@ export const sendAccountStatusEmail = async (email, username, newStatus, role = 
         description = "Your account is active. You can now log in and access your vendor dashboard.";
 
     } else if (newStatus === "active" && role === "customer") {
-        // This handles BOTH customer initial registration AND customer reactivation
         emailSubject = "Account Active - Welcome to Food Waste Reduction!";
         headingText = "Your account is active and ready to use.";
         statusText = "Active";
         description = "You can now log in, browse available products, and start shopping right away!";
 
-        // ── VENDOR ONLY ONBOARDING STATUS LOGIC ──────────────────────────────────
     } else if (role === "vendor") {
         if (newStatus === "incompleteData") {
             emailSubject = "Your Vendor Application Has Been Approved!";
