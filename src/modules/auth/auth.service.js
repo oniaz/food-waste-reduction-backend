@@ -160,6 +160,9 @@ export async function initiatePasswordReset(username, frontendUrl) {
                 console.error(
                     `[Warning] Reset email failed to send to ${user.username} (${user.email})`
                 );
+                console.error("Email details:", emailResult.error);
+            } else {
+                console.log("email sent successfully")
             }
         })
         .catch((err) => {

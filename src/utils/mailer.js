@@ -15,6 +15,15 @@ const transporter = nodemailer.createTransport({
     },
 });
 
+transporter
+    .verify()
+    .then(() => {
+        console.log("[SMTP] Connection successful");
+    })
+    .catch((err) => {
+        console.error("[SMTP] Verify failed:", err);
+    });
+
 export const getEmailLayout = (title, bodyContent) => {
     return `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; background-color: #f8fafc; padding: 40px 20px; color: #1e293b;">
@@ -42,9 +51,19 @@ export const sendEmail = async ({ to, subject, html, title, raw = false }) => {
 
         return { success: true, info };
     } catch (error) {
-        console.error("[Nodemailer Error] Failed to send email:", error.message);
-        return { success: false, error: error.message };
-    }
+        console.error("[Nodemailer Error]", error);
+
+        return {
+            success: false,
+            error: {
+                message: error.message,
+                code: error.code,
+                command: error.command,
+                response: error.response,
+                responseCode: error.responseCode,
+            },
+    };
+}
 };
 
 export const sendPasswordResetEmail = async (email, name, resetLink) => {
