@@ -54,16 +54,28 @@ export async function registerUser({ username, password, role, email, profileDat
         // ── Send Registration Emails ──────────────────────────────────────────
         if (role === "vendor") {
             // Vendors get the pending email
-            const emailResult = await sendAccountStatusEmail(newAuth.email, newAuth.username, "pending", "vendor");
-            if (emailResult && !emailResult.success) {
-                console.warn(`[Warning] Application email failed to send to registered vendor ${newAuth.username}`);
-            }
+            sendAccountStatusEmail(newAuth.email, newAuth.username, "pending", "vendor")
+                .then((emailResult) => {
+                    if (emailResult && !emailResult.success) {
+                        console.warn(
+                            `[Warning] Application email failed to send to registered vendor ${newAuth.username}`
+                        );
+                    }
+                })
+                .catch((err) => console.error("[Email Error]", err));
+
         } else if (role === "customer") {
             // Customers get an immediate registration confirmation email
-            const emailResult = await sendAccountStatusEmail(newAuth.email, newAuth.username, "active", "customer");
-            if (emailResult && !emailResult.success) {
-                console.warn(`[Warning] Welcome email failed to send to registered customer ${newAuth.username}`);
-            }
+            const emailResult = await
+                sendAccountStatusEmail(newAuth.email, newAuth.username, "active", "customer")
+                    .then((emailResult) => {
+                        if (emailResult && !emailResult.success) {
+                            console.warn(
+                                `[Warning] Welcome email failed to send to registered customer ${newAuth.username}`
+                            );
+                        }
+                    })
+                    .catch((err) => console.error("[Email Error]", err));
         }
 
         return newAuth;
@@ -142,11 +154,17 @@ export async function initiatePasswordReset(username, frontendUrl) {
 
     const resetLink = `${frontendUrl}/reset-password?token=${token}`;
 
-    const emailResult = await sendPasswordResetEmail(user.email, user.username, resetLink);
-
-    if (emailResult && !emailResult.success) {
-        console.error(`[Warning] Reset email failed to send to ${user.username} (${user.email})`);
-    }
+    sendPasswordResetEmail(user.email, user.username, resetLink)
+        .then((emailResult) => {
+            if (emailResult && !emailResult.success) {
+                console.error(
+                    `[Warning] Reset email failed to send to ${user.username} (${user.email})`
+                );
+            }
+        })
+        .catch((err) => {
+            console.error("[Email Error]", err);
+        });
 }
 
 /**
