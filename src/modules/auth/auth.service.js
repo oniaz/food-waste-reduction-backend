@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import { waitUntil } from "@vercel/functions";
 
 import AppError from "../../utils/AppError.js";
 import { JWT_CONFIG, RESET_TOKEN_CONFIG } from "../../config/auth.js";
@@ -54,29 +55,31 @@ export async function registerUser({ username, password, role, email, profileDat
         // ── Send Registration Emails ──────────────────────────────────────────
         if (role === "vendor") {
             // Vendors get the pending email
-            try {
-                const emailResult = await sendAccountStatusEmail(newAuth.email, newAuth.username, "pending", "vendor");
-                if (emailResult && !emailResult.success) {
-                    console.warn(
-                        `[Warning] Application email failed to send to registered vendor ${newAuth.username}`
-                    );
-                }
-            } catch (err) {
-                console.error("[Email Error]", err);
-            }
+            waitUntil(
+                sendAccountStatusEmail(newAuth.email, newAuth.username, "pending", "vendor")
+                    .then((emailResult) => {
+                        if (emailResult && !emailResult.success) {
+                            console.warn(
+                                `[Warning] Application email failed to send to registered vendor ${newAuth.username}`
+                            );
+                        }
+                    })
+                    .catch((err) => console.error("[Email Error]", err))
+            );
 
         } else if (role === "customer") {
             // Customers get an immediate registration confirmation email
-            try {
-                const emailResult = await sendAccountStatusEmail(newAuth.email, newAuth.username, "active", "customer");
-                if (emailResult && !emailResult.success) {
-                    console.warn(
-                        `[Warning] Welcome email failed to send to registered customer ${newAuth.username}`
-                    );
-                }
-            } catch (err) {
-                console.error("[Email Error]", err);
-            }
+            waitUntil(
+                sendAccountStatusEmail(newAuth.email, newAuth.username, "active", "customer")
+                    .then((emailResult) => {
+                        if (emailResult && !emailResult.success) {
+                            console.warn(
+                                `[Warning] Welcome email failed to send to registered customer ${newAuth.username}`
+                            );
+                        }
+                    })
+                    .catch((err) => console.error("[Email Error]", err))
+            );
         }
 
         return newAuth;
@@ -155,19 +158,22 @@ export async function initiatePasswordReset(username, frontendUrl) {
 
     const resetLink = `${frontendUrl}/reset-password?token=${token}`;
 
-    try {
-        const emailResult = await sendPasswordResetEmail(user.email, user.username, resetLink);
-        if (emailResult && !emailResult.success) {
-            console.error(
-                `[Warning] Reset email failed to send to ${user.username} (${user.email})`
-            );
-            console.error("Email details:", emailResult.error);
-        } else {
-            console.log("email sent successfully")
-        }
-    } catch (err) {
-        console.error("[Email Error]", err);
-    }
+    waitUntil(
+        sendPasswordResetEmail(user.email, user.username, resetLink)
+            .then((emailResult) => {
+                if (emailResult && !emailResult.success) {
+                    console.error(
+                        `[Warning] Reset email failed to send to ${user.username} (${user.email})`
+                    );
+                    console.error("Email details:", emailResult.error);
+                } else {
+                    console.log("email sent successfully")
+                }
+            })
+            .catch((err) => {
+                console.error("[Email Error]", err);
+            })
+    );
 }
 
 /**
