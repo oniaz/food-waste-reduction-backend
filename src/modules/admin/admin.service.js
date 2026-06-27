@@ -84,17 +84,16 @@ export async function updateVendorStatus(authId, vendorId, newStatus) {
     });
 
     // Send status change notification email
-    sendAccountStatusEmail(currentAuth.email, currentAuth.username, newStatus, "vendor")
-        .then((emailResult) => {
-            if (emailResult && !emailResult.success) {
-                console.warn(
-                    `[Warning] Status notification email failed to send to vendor ${currentAuth.username} (${currentAuth.email})`
-                );
-            }
-        })
-        .catch((err) => {
-            console.error("[Email Error]", err);
-        });
+    try {
+        const emailResult = await sendAccountStatusEmail(currentAuth.email, currentAuth.username, newStatus, "vendor");
+        if (emailResult && !emailResult.success) {
+            console.warn(
+                `[Warning] Status notification email failed to send to vendor ${currentAuth.username} (${currentAuth.email})`
+            );
+        }
+    } catch (err) {
+        console.error("[Email Error]", err);
+    }
 
     return {
         vendorId: vendorProfile._id,
@@ -161,22 +160,21 @@ export async function updateCustomerStatus(authId, customerId, newStatus) {
     });
 
     // Send status change notification email
-    sendAccountStatusEmail(
-        currentAuth.email,
-        currentAuth.username,
-        newStatus,
-        "customer"
-    )
-        .then((emailResult) => {
-            if (emailResult && !emailResult.success) {
-                console.warn(
-                    `[Warning] Status notification email failed to send to customer ${currentAuth.username} (${currentAuth.email})`
-                );
-            }
-        })
-        .catch((err) => {
-            console.error("[Email Error]", err);
-        });
+    try {
+        const emailResult = await sendAccountStatusEmail(
+            currentAuth.email,
+            currentAuth.username,
+            newStatus,
+            "customer"
+        );
+        if (emailResult && !emailResult.success) {
+            console.warn(
+                `[Warning] Status notification email failed to send to customer ${currentAuth.username} (${currentAuth.email})`
+            );
+        }
+    } catch (err) {
+        console.error("[Email Error]", err);
+    }
 
     return {
         customerId: customerProfile._id,
