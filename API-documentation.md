@@ -1317,7 +1317,7 @@ PATCH /api/admin/customers/665b2c4d3e8f9a0b1c2d3e4f/status
 
 #### Description
 
-Returns a paginated, descending-chronological list of every `AdminLogs` document across all admins. Used for global system auditing.
+Returns a paginated, descending-chronological list of every `AdminLogs` document across all admins. Used for global system auditing.The response deep-populates the acting admin's structural profile to show their corresponding authentication username, used for global system auditing.
 
 #### Request Details
 
@@ -1344,25 +1344,36 @@ GET /api/admin/logs?page=2&limit=20
 
 ```json
 {
-  "success": true,
-  "pagination": {
-    "totalLogs": 145,
-    "currentPage": 2,
-    "totalPages": 8,
-    "limit": 20
-  },
-  "count": 20,
-  "logs": [
-    {
-      "_id": "666c3d...",
-      "adminId": "664d2e...",
-      "userId": "663f8a...",
-      "action": "approve_vendor",
-      "description": "Changed vendor with Id 664a1f... status from 'pending' to 'incompleteData'.",
-      "createdAt": "2024-06-01T08:30:00.000Z",
-      "updatedAt": "2024-06-01T08:30:00.000Z"
-    }
-  ]
+    "success": true,
+    "pagination": {
+        "totalLogs": 23,
+        "currentPage": 1,
+        "totalPages": 23,
+        "limit": 1
+    },
+    "count": 1,
+    "logs": [
+        {
+            "_id": "6a41...",
+            "adminId": {
+                "_id": "6a3be....",
+                "authId": {
+                    "_id": "6a3be....",
+                    "username": "Admin2"
+                },
+                "createdAt": "2026-06-24T14:20:34.492Z",
+                "updatedAt": "2026-06-24T14:20:34.492Z",
+                "__v": 0
+            },
+            "userId": "6a41.....",
+            "action": "reactivate_user",
+            "description": "Changed vendor with Id 6a41... status from 'suspended' to 'active'.",
+            "createdAt": "2026-06-28T21:17:22.931Z",
+            "updatedAt": "2026-06-28T21:17:22.931Z",
+            "__v": 0
+        }
+    ],
+    "message": "Request successful"
 }
 ```
 
