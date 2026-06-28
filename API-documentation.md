@@ -901,7 +901,7 @@ Returns a KPI analytics summary for the authenticated vendor. The controller ite
 | | |
 |---|---|
 | **Method & URL** | `GET /api/users/vendor-dashboard` |
-| **Auth required** | Yes — role: `vendor`; status: `active` or `suspended` |
+| **Auth required** | Yes — role: `vendor`; status: `active`, `incompleteData` or `suspended` |
 | **Cookie** | `token=<JWT>` |
 
 **Request Body:** None.
@@ -941,7 +941,7 @@ Returns a KPI analytics summary for the authenticated vendor. The controller ite
 |---|---|---|
 | `401` | Missing or invalid JWT | `"Unauthorized: Authentication token is missing"` |
 | `403` | Role is not `vendor` | `"Forbidden. Your account role does not have permission to access this resource."` |
-| `403` | `accountStatus` not `active` or `suspended` | `"Forbidden. Your account status does not have permission to access this resource."` |
+| `403` | `accountStatus` not `active`, `incompleteData`, or `suspended` | `"Forbidden. Your account status does not have permission to access this resource."` |
 | `500` | Unexpected DB error | `"Internal server error"` |
 
 ---
@@ -2335,7 +2335,7 @@ Returns a paginated, descending-chronological list of orders that contain at lea
 | | |
 |---|---|
 | **Method & URL** | `GET /api/orders/vendor` |
-| **Auth required** | Yes — role: `vendor`; status: `active` or `suspended` |
+| **Auth required** | Yes — role: `vendor`; status: `active`, `incompleteData`, or `suspended` |
 | **Cookie** | `token=<JWT>` |
 
 **Query Parameters**
