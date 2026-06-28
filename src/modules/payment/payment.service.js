@@ -89,13 +89,19 @@ export async function initiateVendorPayment(vendorId, billingData) {
  *   5. Writes an immutable VendorPaymentLog entry.
  */
 export async function processPaymentWebhook(transaction) {
+    console.log("=== VERCEL WEBHOOK START ===");
+    console.log("Transaction Payload keys:", Object.keys(transaction || {}));
+
     const {
         id: paymobTransactionId,
         success,
         amount_cents,
         currency,
         intention_order_data,
+        extra,
     } = transaction;
+
+    console.log(`Processing Transaction ID: ${paymobTransactionId}, Success Status: ${success}`);
 
     // Only process successful transactions
     if (success !== true) {
@@ -113,7 +119,12 @@ export async function processPaymentWebhook(transaction) {
     }
 
     // Extract vendorId embedded in intention extras at checkout creation time
-    const vendorId = intention_order_data?.extras?.vendorId;
+    console.log("Nesting Debug - intention_order_data.extras:", JSON.stringify(intention_order_data?.extras));
+    console.log("Nesting Debug - extra field:", JSON.stringify(extra));
+
+    const vendorId = intention_order_data?.extras?.vendorId || extra?.vendorId;
+    console.log(`Extracted Vendor ID resolving to: ${vendorId}`);
+
     if (!vendorId) {
         throw new AppError("Webhook missing vendorId in extras", 400);
     }
@@ -122,9 +133,11 @@ export async function processPaymentWebhook(transaction) {
     if (!vendor) throw new AppError(`Vendor ${vendorId} not found during webhook processing`, 404);
 
     const previousBalance = vendor.moneyOwed;
+    console.log(`Found Vendor: ${vendor.shopName}, Current Owed Balance: ${previousBalance}`);
 
     // Zero out the balance atomically
     await paymentRepo.clearVendorMoneyOwed(vendorId);
+    console.log(`Atomically cleared moneyOwed field for vendor ${vendorId}`);
 
     // Write the immutable payment audit log
     await paymentRepo.createPaymentLog({
@@ -135,6 +148,7 @@ export async function processPaymentWebhook(transaction) {
         currency: currency || CURRENCY,
         previousBalance,
     });
+    console.log("Immutable VendorPaymentLog created successfully.");
 
     console.log(`✅ Payment processed — Vendor: ${vendor.shopName} | Amount: ${amount_cents / 100} ${currency} | Prev balance: ${previousBalance} EGP`);
 
