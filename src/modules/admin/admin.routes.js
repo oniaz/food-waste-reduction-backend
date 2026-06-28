@@ -5,6 +5,7 @@ import {
     getAllLogs,
     getAdminLogs,
     changeCustomerStatus,
+    getAdminDashboard
 } from "./admin.controller.js";
 import {
     validateVendorStatusUpdate,
@@ -15,6 +16,10 @@ import authenticate from "../../middleware/authentication.middleware.js";
 import authorizeRole from "../../middleware/authorization.middleware.js";
 
 const router = express.Router();
+router.use((req, res, next) => {
+    console.log("Admin router hit:", req.method, req.path);
+    next();
+});
 
 // GET /admin/pending-vendors | Auth required (admin) | list vendors awaiting approval
 // PATCH /admin/vendors/:vendorId/status | Auth required (admin) | approve or reject vendor account
@@ -22,6 +27,9 @@ const router = express.Router();
 // GET /admin/:id/logs | Auth required (admin) | get logs for specific admin user
 
 router.get("/pending-vendors", authenticate, authorizeRole("admin"), getPendingVendors);
+router.get("/dashboard", authenticate, authorizeRole("admin"), getAdminDashboard);
+
+router.get("/logs", authenticate, authorizeRole("admin"), getAllLogs);
 
 router.patch(
     "/vendors/:vendorId/status",
@@ -39,8 +47,7 @@ router.patch(
     changeCustomerStatus
 );
 
-router.get("/logs", authenticate, authorizeRole("admin"), getAllLogs);
-
 router.get("/:id/logs", authenticate, authorizeRole("admin"), validateAdminIdParam, getAdminLogs);
+
 
 export default router;

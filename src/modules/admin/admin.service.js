@@ -216,3 +216,13 @@ export async function getLogsByAdmin(adminId, page, limit) {
 
     return { logs, totalLogs };
 }
+
+//Admin Dashboard
+export async function getDashBoard() {
+    const totalVendors = await adminRepo.countVendors();
+    console.log("1");
+    const totalCustomers = await adminRepo.countCustomers();
+    const totalOrders = await adminRepo.countOrders();
+    const totalProducts= await adminRepo.countProducts();
+    return { totalVendors, totalCustomers, totalOrders , totalProducts };
+}

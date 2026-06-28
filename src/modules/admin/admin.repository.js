@@ -2,6 +2,8 @@ import UsersAuth from "../../models/usersAuth.model.js";
 import Vendors from "../../models/vendors.model.js";
 import Customers from "../../models/customers.model.js";
 import Admin from "../../models/admins.models.js";
+import Orders from "../../models/orders.model.js";      
+import Products from "../../models/products.model.js";  
 import Logs from "../../models/adminLogs.model.js";
 
 // ── UsersAuth ─────────────────────────────────────────────────────────────────
@@ -56,3 +58,14 @@ export const countLogsByAdmin = (adminId) =>
 
 export const findLogsByAdmin = (adminId, skip, limit) =>
     Logs.find({ adminId }).sort({ createdAt: -1 }).skip(skip).limit(limit).lean();
+
+// ── dashboard ──────────────────────────────────────────────────────────────────────
+
+export const countCustomers = () =>
+    Customers.countDocuments();
+export const countVendors = () =>
+    Vendors.countDocuments();
+export const countOrders = () =>
+    Orders.countDocuments();
+export const countProducts = () =>
+    Products.countDocuments();
