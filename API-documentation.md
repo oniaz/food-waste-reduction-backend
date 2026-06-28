@@ -37,6 +37,8 @@
    - 4.3 [Change Customer Account Status](#43-patch-apiadmincustomerscustomeridstatus)
    - 4.4 [Get All System Logs](#44-get-apiadminlogs)
    - 4.5 [Get Logs for a Specific Admin](#45-get-apiadminidlogs)
+   - 4.6 [Get Admin Dashboard](#46-get-apiadmindashboard)
+   
 5. [Product Endpoints `GET|POST|PUT|DELETE /api/products/...`](#5-product-endpoints)
    - 5.1 [Get All Products](#51-get-apiproducts)
    - 5.2 [Search Products](#52-get-apiproductssearch)
@@ -1444,6 +1446,46 @@ GET /api/admin/664d2e3f4a5b6c7d8e9f0a1b/logs?page=1&limit=10
 | `500` | Unexpected DB error | `"Internal server error"` |
 
 ---
+### 4.6 `GET /api/admin/dashboard`
+
+#### Description
+
+Returns a high-level summary of platform statistics for the admin dashboard, including total counts of vendors, customers, orders, and products.
+
+#### Request Details
+
+| | |
+|---|---|
+| **Method & URL** | `GET /api/admin/dashboard` |
+| **Auth required** | Yes — role: `admin` |
+| **Content-Type** | N/A |
+| **Cookie** | `token=<JWT>` |
+
+No request body or query parameters.
+
+#### Success Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Retrived Dashboard info Successfully",
+  "data": {
+    "totalVendors": 42,
+    "totalCustomers": 318,
+    "totalOrders": 1024,
+    "totalProducts": 275
+  }
+}
+```
+
+#### Error Responses
+
+| Status | Scenario | Message |
+|---|---|---|
+| `401` | Missing or invalid JWT | `"Unauthorized: Authentication token is missing"` |
+| `403` | Role is not `admin` | `"Forbidden. Your account role does not have permission to access this resource."` |
+| `500` | Unexpected DB error | `"Internal server error"` |
+
 
 ## 5. Product Endpoints
 
