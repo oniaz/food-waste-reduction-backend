@@ -33,8 +33,12 @@ export const updateVendorById = (id, updates, options) =>
     Vendors.findByIdAndUpdate(id, updates, options).lean();
 
 export const findAllVendors = (skip, limit) =>
-    Vendors.find({}).sort({ moneyOwed: -1 }).skip(skip).limit(limit).lean();
-
+    Vendors.find({})
+        .sort({ moneyOwed: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("authId", "accountStatus")
+        .lean();
 export const countVendors = () =>
     Vendors.countDocuments({});
 
@@ -50,7 +54,11 @@ export const updateCustomerById = (id, updates, options) =>
     Customers.findByIdAndUpdate(id, updates, options).lean();
 
 export const findAllCustomers = (skip, limit) =>
-    Customers.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).lean();
+    Customers.find({})
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("authId", "accountStatus")
 
 export const countCustomers = () =>
     Customers.countDocuments({});

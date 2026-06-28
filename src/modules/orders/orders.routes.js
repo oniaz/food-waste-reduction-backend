@@ -49,7 +49,7 @@ router.get(
     "/vendor",
     authenticate,
     authorizeRole("vendor"),
-    authorizeStatus("active", "suspended"),
+    authorizeStatus("active", "incompleteData", "suspended"),
     getVendorOrders
 ); //must be defined before the more general /:id route to avoid route conflicts
 

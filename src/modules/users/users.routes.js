@@ -36,7 +36,7 @@ router.get(
     "/vendor-dashboard",
     authenticate,
     authorizeRole("vendor"),
-    authorizeStatus("active", "suspended"),
+    authorizeStatus("active", "incompleteData", "suspended"),
     getVendorAnalytics
 );
 

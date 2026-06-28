@@ -37,6 +37,8 @@
    - 4.3 [Change Customer Account Status](#43-patch-apiadmincustomerscustomeridstatus)
    - 4.4 [Get All System Logs](#44-get-apiadminlogs)
    - 4.5 [Get Logs for a Specific Admin](#45-get-apiadminidlogs)
+   - 4.6 [Get Admin Dashboard](#46-get-apiadmindashboard)
+   
 5. [Product Endpoints `GET|POST|PUT|DELETE /api/products/...`](#5-product-endpoints)
    - 5.1 [Get All Products](#51-get-apiproducts)
    - 5.2 [Search Products](#52-get-apiproductssearch)
@@ -899,7 +901,7 @@ Returns a KPI analytics summary for the authenticated vendor. The controller ite
 | | |
 |---|---|
 | **Method & URL** | `GET /api/users/vendor-dashboard` |
-| **Auth required** | Yes — role: `vendor`; status: `active` or `suspended` |
+| **Auth required** | Yes — role: `vendor`; status: `active`, `incompleteData` or `suspended` |
 | **Cookie** | `token=<JWT>` |
 
 **Request Body:** None.
@@ -939,7 +941,7 @@ Returns a KPI analytics summary for the authenticated vendor. The controller ite
 |---|---|---|
 | `401` | Missing or invalid JWT | `"Unauthorized: Authentication token is missing"` |
 | `403` | Role is not `vendor` | `"Forbidden. Your account role does not have permission to access this resource."` |
-| `403` | `accountStatus` not `active` or `suspended` | `"Forbidden. Your account status does not have permission to access this resource."` |
+| `403` | `accountStatus` not `active`, `incompleteData`, or `suspended` | `"Forbidden. Your account status does not have permission to access this resource."` |
 | `500` | Unexpected DB error | `"Internal server error"` |
 
 ---
@@ -948,7 +950,7 @@ Returns a KPI analytics summary for the authenticated vendor. The controller ite
 
 #### Description
 
-Returns a paginated list of all `Vendors` documents, sorted descending by `moneyOwed` (highest platform debt first). Intended for admin financial oversight.
+Returns a paginated list of all `Vendors` documents, sorted descending by `moneyOwed` (highest platform debt first). Intended for admin financial oversight.The authId field is populated to return the Vendors's account status. Intended for admin user management
 
 #### Request Details
 
@@ -989,7 +991,10 @@ GET /api/users/get-vendors?page=1&limit=20
       "shopName": "Fresh Basket",
       "moneyOwed": 340.50,
       "rating": { "score": 18, "totalRatingsNumber": 4 },
-      "authId": "663f8a...",
+      "authId": {
+        "_id": "663f8a...",
+        "accountStatus": "active"
+      },
       "...": "full Vendors document"
     }
   ]
@@ -1010,7 +1015,7 @@ GET /api/users/get-vendors?page=1&limit=20
 
 #### Description
 
-Returns a paginated list of all `Customers` documents, sorted descending by `createdAt` (newest registrations first). Intended for admin user management.
+Returns a paginated list of all `Customers` documents, sorted descending by `createdAt` (newest registrations first). Intended for admin user management.The authId field is populated to return the customer's account status. Intended for admin user management
 
 #### Request Details
 
@@ -1050,7 +1055,10 @@ GET /api/users/get-customers?page=3&limit=15
       "_id": "665b2c...",
       "name": { "firstName": "Sara", "lastName": "Hassan" },
       "loyaltyPoints": 120,
-      "authId": "663f8a...",
+      "authId": {
+        "_id": "663f8a...",
+        "accountStatus": "active"
+      },
       "...": "full Customers document"
     }
   ]
@@ -1438,6 +1446,46 @@ GET /api/admin/664d2e3f4a5b6c7d8e9f0a1b/logs?page=1&limit=10
 | `500` | Unexpected DB error | `"Internal server error"` |
 
 ---
+### 4.6 `GET /api/admin/dashboard`
+
+#### Description
+
+Returns a high-level summary of platform statistics for the admin dashboard, including total counts of vendors, customers, orders, and products.
+
+#### Request Details
+
+| | |
+|---|---|
+| **Method & URL** | `GET /api/admin/dashboard` |
+| **Auth required** | Yes — role: `admin` |
+| **Content-Type** | N/A |
+| **Cookie** | `token=<JWT>` |
+
+No request body or query parameters.
+
+#### Success Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Retrived Dashboard info Successfully",
+  "data": {
+    "totalVendors": 42,
+    "totalCustomers": 318,
+    "totalOrders": 1024,
+    "totalProducts": 275
+  }
+}
+```
+
+#### Error Responses
+
+| Status | Scenario | Message |
+|---|---|---|
+| `401` | Missing or invalid JWT | `"Unauthorized: Authentication token is missing"` |
+| `403` | Role is not `admin` | `"Forbidden. Your account role does not have permission to access this resource."` |
+| `500` | Unexpected DB error | `"Internal server error"` |
+
 
 ## 5. Product Endpoints
 
@@ -2287,7 +2335,7 @@ Returns a paginated, descending-chronological list of orders that contain at lea
 | | |
 |---|---|
 | **Method & URL** | `GET /api/orders/vendor` |
-| **Auth required** | Yes — role: `vendor`; status: `active` or `suspended` |
+| **Auth required** | Yes — role: `vendor`; status: `active`, `incompleteData`, or `suspended` |
 | **Cookie** | `token=<JWT>` |
 
 **Query Parameters**

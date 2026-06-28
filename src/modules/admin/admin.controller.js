@@ -4,6 +4,7 @@ import {
     updateCustomerStatus,
     getAllAdminLogs,
     getLogsByAdmin,
+    getDashBoard
 } from "./admin.service.js";
 
 // GET /admin/pending-vendors | Auth required (admin) | list vendors awaiting approval
@@ -170,3 +171,19 @@ export const changeCustomerStatus = async (req, res, next) => {
         next(error);
     }
 };
+
+// Get /admin/dashboard
+export const getAdminDashboard =async(req,res,next)=>{
+    try {
+    const data = await getDashBoard();
+    return res.status(200).json({
+            success: true,
+            message: `Retrived Dashboard info Successfully`,
+            data,
+    });
+        
+    } catch (error) {
+        console.log(error);
+         next(error);
+    }
+}
