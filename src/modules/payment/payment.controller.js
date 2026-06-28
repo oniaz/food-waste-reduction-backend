@@ -1,3 +1,4 @@
+import { waitUntil } from "@vercel/functions";
 import {
     initiateVendorPayment,
     processPaymentWebhook,
@@ -70,10 +71,14 @@ export const handleWebhook = async (req, res, next) => {
     try {
         const transaction = req.body.obj;
 
-        const result = await processPaymentWebhook(transaction);
+        waitUntil(
+            processPaymentWebhook(transaction).catch((error) => {
+                console.error("Background webhook processing error:", error.message);
+            })
+        );
 
         // Always respond 200 immediately — Paymob retries on anything else
-        return res.status(200).json({ received: true, ...result });
+        return res.status(200).json({ received: true });
     } catch (error) {
         console.error("Webhook processing error:", error.message);
         // Still respond 200 to stop Paymob retrying — error is logged for investigation
