@@ -16,10 +16,6 @@ import authenticate from "../../middleware/authentication.middleware.js";
 import authorizeRole from "../../middleware/authorization.middleware.js";
 
 const router = express.Router();
-router.use((req, res, next) => {
-    console.log("Admin router hit:", req.method, req.path);
-    next();
-});
 
 // GET /admin/pending-vendors | Auth required (admin) | list vendors awaiting approval
 // PATCH /admin/vendors/:vendorId/status | Auth required (admin) | approve or reject vendor account
