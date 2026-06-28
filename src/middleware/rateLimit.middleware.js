@@ -23,7 +23,7 @@ export const globalLimiter = rateLimit({  //will be applied to the whole server 
 
 export const authLimiter = rateLimit({ //apply to login
     windowMs: 10 * 60 * 1000, // 10 mins
-    max: 5, // Only 5 login attempts allowed
+    max: 100, // Only 5 login attempts allowed
     handler: rateLimitHandler("Too many login attempts. Try again later."),
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, 
