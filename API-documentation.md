@@ -948,7 +948,7 @@ Returns a KPI analytics summary for the authenticated vendor. The controller ite
 
 #### Description
 
-Returns a paginated list of all `Vendors` documents, sorted descending by `moneyOwed` (highest platform debt first). Intended for admin financial oversight.
+Returns a paginated list of all `Vendors` documents, sorted descending by `moneyOwed` (highest platform debt first). Intended for admin financial oversight.The authId field is populated to return the Vendors's account status. Intended for admin user management
 
 #### Request Details
 
@@ -989,7 +989,10 @@ GET /api/users/get-vendors?page=1&limit=20
       "shopName": "Fresh Basket",
       "moneyOwed": 340.50,
       "rating": { "score": 18, "totalRatingsNumber": 4 },
-      "authId": "663f8a...",
+      "authId": {
+        "_id": "663f8a...",
+        "accountStatus": "active"
+      },
       "...": "full Vendors document"
     }
   ]
@@ -1010,7 +1013,7 @@ GET /api/users/get-vendors?page=1&limit=20
 
 #### Description
 
-Returns a paginated list of all `Customers` documents, sorted descending by `createdAt` (newest registrations first). Intended for admin user management.
+Returns a paginated list of all `Customers` documents, sorted descending by `createdAt` (newest registrations first). Intended for admin user management.The authId field is populated to return the customer's account status. Intended for admin user management
 
 #### Request Details
 
@@ -1050,7 +1053,10 @@ GET /api/users/get-customers?page=3&limit=15
       "_id": "665b2c...",
       "name": { "firstName": "Sara", "lastName": "Hassan" },
       "loyaltyPoints": 120,
-      "authId": "663f8a...",
+      "authId": {
+        "_id": "663f8a...",
+        "accountStatus": "active"
+      },
       "...": "full Customers document"
     }
   ]
