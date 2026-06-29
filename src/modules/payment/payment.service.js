@@ -55,15 +55,35 @@ async function createPaymobIntention(amountCents, billingData, vendorId) {
  * for that exact amount, and returns the hosted checkout URL.
  *
  * @param {string} vendorId - The vendor's profile _id from req.user.id
- * @param {Object} billingData - Paymob billing_data block built by the controller from vendorFullName/Email/Phone
  */
-export async function initiateVendorPayment(vendorId, billingData) {
-    const vendor = await paymentRepo.findVendorById(vendorId);
+export async function initiateVendorPayment(vendorId) {
+    const vendor = await paymentRepo.findVendorById(vendorId).populate("authId");
     if (!vendor) throw new AppError("Vendor not found", 404);
 
     if (!vendor.moneyOwed || vendor.moneyOwed <= 0) {
         throw new AppError("No outstanding balance to pay", 400);
     }
+
+    // Build Paymob's required billing_data block entirely from Database variables.
+    // Paymob needs first_name and last_name separately — split shopName on the first space.
+    const nameParts = vendor.shopName.trim().split(" ");
+    const billingData = {
+        first_name: nameParts[0],
+        last_name: nameParts.slice(1).join(" ") || "Store", // fallback text if shopName is a single word
+        email: vendor.authId?.email || "no-reply@platform.com",
+        phone_number: vendor.phoneNumber,
+        // The fields below are required by Paymob's schema but not relevant
+        // for a vendor-to-platform payment — filled with NA placeholders.
+        apartment: "NA",
+        floor: "NA",
+        street: "NA",
+        building: "NA",
+        shipping_method: "NA",
+        postal_code: "NA",
+        city: vendor.address?.city || "NA",
+        country: "EGY",
+        state: vendor.address?.governorate || "NA",
+    };
 
     // Convert EGP to cents — Paymob always works in the smallest currency unit
     const amountCents = Math.round(vendor.moneyOwed * 100);
