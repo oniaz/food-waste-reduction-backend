@@ -13,6 +13,7 @@ import ordersRoutes from "./modules/orders/orders.routes.js";
 import productsRoutes from "./modules/products/products.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
 import locationsRoutes from "./modules/locations/locations.routes.js";
+import paymentRoutes from "./modules/payment/payment.routes.js";
 import {
   notFoundMiddleware,
   errorMiddleware,
@@ -55,6 +56,7 @@ app.use("/api/orders", ordersRoutes);
 app.use("/api/products", productsRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/locations", locationsRoutes);
+app.use("/api/payment", paymentRoutes);
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);

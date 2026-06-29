@@ -1,7 +1,7 @@
 # Food Waste Reduction — REST API Documentation
 
 > **Version:** 1.0.0
-> **Stack:** Node.js · Express 5 · MongoDB / Mongoose · JWT (HTTP-only cookie) · Cloudinary · Gemini 2.5 Flash · Groq Llama 3.1 8B
+> **Stack:** Node.js · Express 5 · MongoDB / Mongoose · JWT (HTTP-only cookie) · Cloudinary · Gemini 2.5 Flash · Groq Llama 3.1 8B · Paymob
 > **Base URL:** `https://<your-domain>/api`
 > **Deployment:** Vercel (serverless) — `app` is exported as default for the Vercel handler
 
@@ -57,13 +57,19 @@
    - 6.6 [Update Order Status](#66-patch-apiordersidstatus)
    - 6.7 [Rate Order](#67-post-apiordersidrate)
 7. [Locations Endpoint `GET /api/locations`](#7-locations-endpoint)
-8. [Reference Tables](#8-reference-tables)
-   - 8.1 [Account Status Enum](#81-account-status-enum)
-   - 8.2 [Order Status Lifecycle](#82-order-status-lifecycle)
-   - 8.3 [Product Categories & Buffer Days](#83-product-categories--buffer-days)
-   - 8.4 [Supported Egypt Locations](#84-supported-egypt-locations)
-   - 8.5 [Validation Rules Quick Reference](#85-validation-rules-quick-reference)
-   - 8.6 [Product Tags Master List](#86-product-tags-master-list)
+8. [Payment Endpoints `POST|GET /api/payment/...`](#8-payment-endpoints)
+   - 8.1 [Initiate Payment (Vendor)](#81-post-apipaymentinitiate)
+   - 8.2 [Paymob Webhook](#82-post-apipaymentwebhook)
+   - 8.3 [Payment Callback](#83-get-apipaymentcallback)
+   - 8.4 [My Payment History (Vendor)](#84-get-apipaymentmy-history)
+   - 8.5 [All Payment Logs (Admin)](#85-get-apipaymentlogs)
+9. [Reference Tables](#8-reference-tables)
+   - 9.1 [Account Status Enum](#81-account-status-enum)
+   - 9.2 [Order Status Lifecycle](#82-order-status-lifecycle)
+   - 9.3 [Product Categories & Buffer Days](#83-product-categories--buffer-days)
+   - 9.4 [Supported Egypt Locations](#84-supported-egypt-locations)
+   - 9.5 [Validation Rules Quick Reference](#85-validation-rules-quick-reference)
+   - 9.6 [Product Tags Master List](#86-product-tags-master-list)
 
 ---
 
@@ -81,6 +87,7 @@ All routes are prefixed with `/api`:
 | Products | `/api/products` |
 | Orders | `/api/orders` |
 | Locations | `/api/locations` |
+| Payment | `/api/payment` |
 
 ---
 
@@ -2828,9 +2835,411 @@ GET /api/locations
 
 ---
 
-## 8. Reference Tables
+## 8. Payment Endpoints
 
-### 8.1 Account Status Enum
+**Base path:** `/api/payment` | Vendors settle their `moneyOwed` balance via Paymob hosted checkout.
+
+### How the Payment Flow Works
+
+```
+1. Vendor → POST /api/payment/initiate
+Server reads moneyOwed from DB, creates Paymob intention for that exact amount
+Returns hosted checkout URL
+2. Vendor completes card payment on Paymob's hosted page
+
+3. Paymob → POST /api/payment/webhook  (HMAC verified)
+Runs asynchronously via background worker (waitUntil)
+moneyOwed set to 0
+VendorPaymentLog entry written (immutable audit record)
+4. Paymob redirects vendor browser → GET /api/payment/callback
+Parses query context, acts as a synchronous fallback settlement pipeline to double-verify
+clearing the balance, and issues an HTTP redirect to the React frontend
+5. Vendor → GET /api/payment/my-history   (see own payment history)
+Admin → GET /api/payment/logs           (see all vendors' payment history)
+```
+
+> **Important:** While `moneyOwed` is primarily processed by the webhook, the browser callback (`/api/payment/callback`) acts as a critical golden fallback safety mechanism. If it detects a successful query string from Paymob, it will manually parse the `vendorId` (via query params, stringified extras, or splitting the `merchant_order_id`) and handle database resolution inline before redirecting to the frontend UI.
+
+### VendorPaymentLog Document Shape
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | Auto-generated |
+| `vendorId` | ObjectId → `Vendors` | The vendor who made the payment |
+| `amountPaidCents` | number | Amount in cents as received from Paymob |
+| `paymobTransactionId` | string | Paymob transaction ID — unique, used to prevent duplicate processing |
+| `paymobIntentionId` | string | Paymob intention ID created at checkout |
+| `currency` | string | Default: `"EGP"` |
+| `previousBalance` | number | Snapshot of `moneyOwed` before it was cleared |
+| `createdAt` | Date | Timestamp of when the payment was processed |
+
+---
+
+### 8.1 `POST /api/payment/initiate`
+
+#### Description
+
+Creates a Paymob payment intention for the vendor's exact current `moneyOwed` balance and returns a hosted checkout URL. The amount is **always read from the DB** — the client never sends an amount. If `moneyOwed` is `0` or negative, the request is rejected with a `400`.
+
+Currency is hardcoded to `"EGP"` server-side — it is a Paymob API requirement and is never accepted from the client, since EGP is the only currency the platform operates in.
+
+The `vendorId` is embedded in the Paymob intention's `extras` and `special_reference` fields so the webhook can identify who paid without any client-side trust.
+
+The three billing fields (`vendorFullName`, `vendorEmail`, `vendorPhone`) are sent to Paymob for display on their hosted payment page and receipt. They are intentionally user-inputted rather than silently pulled from the DB — payment receipts should reflect what the payer consciously provides.
+
+#### Request Details
+
+| | |
+|---|---|
+| **Method & URL** | `POST /api/payment/initiate` |
+| **Auth required** | Yes — role: `vendor`; status: `active` or `suspended` |
+| **Content-Type** | `application/json` |
+| **Cookie** | `token=<JWT>` |
+
+> Suspended vendors can still access this endpoint intentionally — paying off a debt should not be blocked by a suspension.
+
+**Request Body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `vendorFullName` | string | Yes | Non-empty string; split on first space into `first_name` / `last_name` for Paymob billing data. If a single word is given, it is used for both. |
+| `vendorEmail` | string | Yes | Non-empty string; used by Paymob on the payment page and receipt |
+| `vendorPhone` | string | Yes | Non-empty string; used by Paymob on the payment page and receipt |
+
+**Request Example**
+
+```json
+POST /api/payment/initiate
+
+{
+  "vendorFullName": "Ahmed Ali",
+  "vendorEmail": "ahmed@freshbasket.com",
+  "vendorPhone": "+201012345678"
+}
+```
+
+#### Success Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "paymentUrl": "[https://accept.paymobsolutions.com/unifiedcheckout/?publicKey=egy_pk_...&clientSecret=](https://accept.paymobsolutions.com/unifiedcheckout/?publicKey=egy_pk_...&clientSecret=)...",
+  "intentionId": "pay_intention_abc123",
+  "amountEGP": 340.50,
+  "amountCents": 34050,
+  "currency": "EGP"
+}
+```
+
+> Redirect the vendor's browser to `paymentUrl` to complete the payment on Paymob's hosted page.
+
+#### Error Responses
+
+| Status | Scenario | Message |
+|---|---|---|
+| `400` | `vendorFullName` missing or empty | `"vendorFullName is required"` |
+| `400` | `vendorEmail` missing or empty | `"vendorEmail is required"` |
+| `400` | `vendorPhone` missing or empty | `"vendorPhone is required"` |
+| `400` | Vendor has no outstanding balance (`moneyOwed` is `0` or negative) | `"No outstanding balance to pay"` |
+| `401` | Missing or invalid JWT | `"Unauthorized: Authentication token is missing"` |
+| `403` | Role is not `vendor` | `"Forbidden. Your account role does not have permission to access this resource."` |
+| `404` | Vendor profile not found | `"Vendor not found"` |
+| `502` | Paymob API returned a non-2xx response | `"Paymob API error (<status>): <detail>"` |
+| `500` | Unexpected server error | `"Internal server error"` |
+
+---
+
+### 8.2 `POST /api/payment/webhook`
+
+#### Description
+
+Paymob calls this endpoint after every transaction attempt (success or failure). The request is verified by the `verifyPaymobHmac` middleware before the controller runs — any request with an invalid or missing HMAC signature is rejected with `401`.
+
+**Background Execution Process:**
+To ensure high availability and stay within platform execution limits, the webhook controller hands off processing to a background task runner using Vercel's `waitUntil` pipeline and responds immediately.
+
+**On a successful transaction (`success === true`):**
+1. Checks for duplicate delivery using `paymobTransactionId` (Paymob retries on non-`200` responses).
+2. Extracts `vendorId` from `intention_order_data.extras.vendorId` or top-level `extra.vendorId`.
+3. Snapshots the vendor's current `moneyOwed` as `previousBalance`.
+4. Sets `vendor.moneyOwed` to `0` atomically.
+5. Creates an immutable `VendorPaymentLog` entry.
+
+**On a failed transaction:** skips processing — no DB changes are made.
+
+> This endpoint always returns an HTTP `200` object response with `{ "received": true }` even if exceptions or processing errors occur. This prevents Paymob from stalling workflows or retrying indefinitely. Internal exceptions are safely logged to system errors for administration.
+
+#### Request Details
+
+| | |
+|---|---|
+| **Method & URL** | `POST /api/payment/webhook` |
+| **Auth required** | No JWT — protected by HMAC signature verification |
+| **Content-Type** | `application/json` |
+| **Query Parameter** | `?hmac=<sha512-signature>` — appended by Paymob automatically |
+
+**Request Body (sent by Paymob)**
+
+```json
+{
+  "obj": {
+    "id": 98765432,
+    "success": true,
+    "amount_cents": 34050,
+    "currency": "EGP",
+    "created_at": "2024-06-10T14:22:00Z",
+    "error_occured": false,
+    "has_parent_transaction": false,
+    "integration_id": 123456,
+    "is_3d_secure": true,
+    "is_auth": false,
+    "is_capture": false,
+    "is_refunded": false,
+    "is_standalone_payment": true,
+    "is_voided": false,
+    "order": { "id": 11223344 },
+    "owner": 99887766,
+    "pending": false,
+    "source_data": {
+      "pan": "2346",
+      "sub_type": "MasterCard",
+      "type": "card"
+    },
+    "intention_order_data": {
+      "id": "pay_intention_abc123",
+      "extras": { "vendorId": "664a1f3e2b7c8d9e0f123456" }
+    }
+  }
+}
+```
+
+#### Success Response — `200 OK`
+
+```json
+{
+  "received": true
+}
+```
+
+#### Error Handled Response — `200 OK` (Internal Exception Caught)
+
+```json
+{
+  "received": true,
+  "error": "Webhook missing vendorId in extras"
+}
+
+```
+
+---
+
+### 8.3 `GET /api/payment/callback`
+
+#### Description
+
+Paymob redirects the vendor's browser to this URL after completing checkout. This route acts as a **browser redirection interface** and secure verification layer. It parses transaction statuses from URL parameters and dynamically handles error states or successes.
+
+**Fallback Pipeline Operations:**
+If Paymob reports `success=true`, the endpoint triggers a synchronous fallback verification pipeline right away. It searches for `vendorId` through multiple payload variations (`query.vendorId`, nested object strings inside `extra_fields`, or parsed directly out of `merchant_order_id` via `"vendor-ID-timestamp"` splitting format).
+
+It then reconstructs the full context payload structure and explicitly runs the database ledger completion workflow synchronously to clear balances immediately, prior to moving the user out of the backend stack.
+
+#### Request Details
+
+| | |
+|---|---|
+| **Method & URL** | `GET /api/payment/callback` |
+| **Auth required** | No — public browser redirect from Paymob |
+
+**Query Parameters (appended by Paymob URL parameters)**
+
+| Parameter | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `success` | string | Yes | `"true"` or `"false"` status string |
+| `id` | string | Yes | Transaction ID identifier |
+| `amount_cents` | string | No | Calculated integer amount value in cents units |
+| `currency` | string | No | String name currency type fallback (Defaults to `"EGP"`) |
+| `merchant_order_id` | string | No | Platform order reference template string format (`vendor-ID-timestamp`) |
+
+#### Output Response — HTTP `302 Redirect`
+
+This endpoint does not output raw text data response structures; it redirects user browser profiles directly to frontend application routes using your configure paths:
+
+* **Successful Payments Redirect Target:** `${FRONTEND_APP_URL}/payment-success?status=success&tx={transactionId}`
+* **Failed/Cancelled Payments Redirect Target:** `${FRONTEND_APP_URL}/payment-failed?status=failed&tx={transactionId}`
+* **Runtime System Error Redirect Target:** `${FRONTEND_APP_URL}/payment-failed?status=error&message={encodedErrorMessage}`
+
+---
+
+### 8.4 `GET /api/payment/my-history`
+
+#### Description
+
+Returns the authenticated vendor's own payment history in descending chronological order (most recent first), paginated.
+
+#### Request Details
+
+| | |
+|---|---|
+| **Method & URL** | `GET /api/payment/my-history` |
+| **Auth required** | Yes — role: `vendor`; status: `active` or `suspended` |
+| **Cookie** | `token=<JWT>` |
+
+**Query Parameters**
+
+| Parameter | Type | Required | Default |
+|---|---|---|---|
+| `page` | integer | No | `1` |
+| `limit` | integer | No | `10` |
+
+**Request Example**
+
+```
+GET /api/payment/my-history?page=1&limit=10
+```
+
+#### Success Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "pagination": {
+    "total": 3,
+    "currentPage": 1,
+    "totalPages": 1,
+    "limit": 10
+  },
+  "count": 3,
+  "logs": [
+    {
+      "_id": "667d1a...",
+      "vendorId": "664a1f...",
+      "amountPaidCents": 34050,
+      "paymobTransactionId": "98765432",
+      "paymobIntentionId": "pay_intention_abc123",
+      "currency": "EGP",
+      "previousBalance": 340.50,
+      "createdAt": "2024-06-10T14:22:00.000Z",
+      "updatedAt": "2024-06-10T14:22:00.000Z"
+    }
+  ]
+}
+```
+
+#### Error Responses
+
+| Status | Scenario | Message |
+|---|---|---|
+| `401` | Missing or invalid JWT | `"Unauthorized: Authentication token is missing"` |
+| `403` | Role is not `vendor` | `"Forbidden. Your account role does not have permission to access this resource."` |
+| `500` | Unexpected DB error | `"Internal server error"` |
+
+---
+
+### 8.5 `GET /api/payment/logs`
+
+#### Description
+
+Admin-only view of all vendor payment logs across the entire platform. Supports filtering by vendor shop name or username, sorting by date, and pagination. Each log entry exposes comprehensive vendor details including `shopName`, `taxNumber`, `phoneNumber`, `address`, `email`, and `username` for easy identification, vendor contact, and reconciliation.
+
+#### Request Details
+
+| | |
+|---|---|
+| **Method & URL** | `GET /api/payment/logs` |
+| **Auth required** | Yes — role: `admin` |
+| **Cookie** | `token=<JWT>` |
+
+**Query Parameters**
+
+| Parameter | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| `shopName` | string | No | — | Case-insensitive partial match on vendor `shopName` |
+| `username` | string | No | — | Exact match on the vendor's `UsersAuth` username |
+| `sortDate` | string | No | `"desc"` | Sort direction by payment date. `"asc"` = oldest first, `"desc"` = newest first |
+| `page` | integer | No | `1` | Page number |
+| `limit` | integer | No | `10` | Records per page |
+
+> `shopName` and `username` can be used together — results are intersected (both conditions must match the same vendor).
+
+**Request Examples**
+
+```
+GET /api/payment/logs?page=1&limit=20
+GET /api/payment/logs?shopName=fresh&sortDate=asc
+GET /api/payment/logs?username=fresh_basket
+GET /api/payment/logs?shopName=basket&username=fresh_basket&sortDate=desc&page=1&limit=10
+```
+
+#### Success Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "pagination": {
+    "total": 47,
+    "currentPage": 1,
+    "totalPages": 3,
+    "limit": 20
+  },
+  "count": 20,
+  "logs": [
+    {
+      "_id": "667d1a...",
+      "vendorId": {
+        "_id": "664a1f...",
+        "shopName": "Fresh Basket",
+        "taxNumber": "TAX-9988776",
+        "phoneNumber": "+201012345678",
+        "address": {
+          "governorate": "alexandria",
+          "city": "alexandria",
+          "neighborhood": "sidi gaber",
+          "detailedAddress": "123 Port Said St",
+          "map": [29.9245, 31.2014]
+        },
+        "email": "vendor@freshbasket.com",
+        "username": "fresh_basket"
+      },
+      "amountPaidCents": 34050,
+      "paymobTransactionId": "98765432",
+      "paymobIntentionId": "pay_intention_abc123",
+      "currency": "EGP",
+      "previousBalance": 340.50,
+      "createdAt": "2024-06-10T14:22:00.000Z",
+      "updatedAt": "2024-06-10T14:22:00.000Z"
+    }
+  ]
+}
+```
+
+#### Error Responses
+
+| Status | Scenario | Message |
+|---|---|---|
+| `401` | Missing or invalid JWT | `"Unauthorized: Authentication token is missing"` |
+| `403` | Role is not `admin` | `"Forbidden. Your account role does not have permission to access this resource."` |
+| `500` | Unexpected DB error | `"Internal server error"` |
+---
+
+### Required Environment Variables for Payment
+
+Add these to your `.env` file:
+
+| Variable | Description |
+|---|---|
+| `PAYMOB_API_KEY` | Secret API key from your Paymob dashboard — used to authenticate server-to-server calls |
+| `PAYMOB_PUBLIC_KEY` | Public key from Paymob dashboard — embedded in the hosted checkout URL |
+| `PAYMOB_INTEGRATION_ID` | The integration ID of your card payment method in Paymob |
+| `PAYMOB_HMAC_SECRET` | HMAC secret from Paymob dashboard — used to verify webhook signatures |
+| `BACKEND_URL` | Base host URL configuration for the backend system layer environment setup |
+| `FRONTEND_APP_URL` | Application endpoint address targets representing your client web user interface portal (Defaults to `http://localhost:5173`) |
+
+---
+
+## 9. Reference Tables
+
+### 9.1 Account Status Enum
 
 | Status | Description | Who can have it |
 |---|---|---|
@@ -2841,7 +3250,7 @@ GET /api/locations
 
 ---
 
-### 8.2 Order Status Lifecycle
+### 9.2 Order Status Lifecycle
 
 ```
                    ┌──────────────────────────────────────┐
@@ -2878,7 +3287,7 @@ GET /api/locations
 
 ---
 
-### 8.3 Product Categories & Buffer Days
+### 9.3 Product Categories & Buffer Days
 
 The `bufferDays` value is subtracted from `expiryDate` to compute `validDate`. A product whose `validDate` would fall before today is **rejected at creation time**.
 
@@ -2897,7 +3306,7 @@ The `bufferDays` value is subtracted from `expiryDate` to compute `validDate`. A
 
 ---
 
-### 8.4 Supported Egypt Locations
+### 9.4 Supported Egypt Locations
 
 The `validateAddress` utility cross-checks address inputs against this dataset. Only the three governorates below are supported.
 
@@ -2911,7 +3320,7 @@ For the full neighborhoods list per city, call `GET /api/locations`.
 
 ---
 
-### 8.5 Validation Rules Quick Reference
+### 9.5 Validation Rules Quick Reference
 
 | Validator | Rule |
 |---|---|
@@ -2929,7 +3338,7 @@ For the full neighborhoods list per city, call `GET /api/locations`.
 
 ---
 
-### 8.6 Product Tags Master List
+### 9.6 Product Tags Master List
 
 Tags are auto-generated by the AI pipeline (or via static fallback) and stored on each product document. The full allowed set is:
 
