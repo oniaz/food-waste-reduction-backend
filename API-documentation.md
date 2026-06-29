@@ -3174,7 +3174,7 @@ GET /api/payment/my-history?page=1&limit=10
 
 #### Description
 
-Admin-only view of all vendor payment logs across the entire platform. Supports filtering by vendor shop name or username, sorting by date, and pagination. Each log entry exposes the vendor's `shopName`, `taxNumber`, and `username` for easy identification and reconciliation.
+Admin-only view of all vendor payment logs across the entire platform. Supports filtering by vendor shop name or username, sorting by date, and pagination. Each log entry exposes comprehensive vendor details including `shopName`, `taxNumber`, `phoneNumber`, `address`, `email`, and `username` for easy identification, vendor contact, and reconciliation.
 
 #### Request Details
 
@@ -3224,6 +3224,15 @@ GET /api/payment/logs?shopName=basket&username=fresh_basket&sortDate=desc&page=1
         "_id": "664a1f...",
         "shopName": "Fresh Basket",
         "taxNumber": "TAX-9988776",
+        "phoneNumber": "+201012345678",
+        "address": {
+          "governorate": "alexandria",
+          "city": "alexandria",
+          "neighborhood": "sidi gaber",
+          "detailedAddress": "123 Port Said St",
+          "map": [29.9245, 31.2014]
+        },
+        "email": "vendor@freshbasket.com",
         "username": "fresh_basket"
       },
       "amountPaidCents": 34050,
@@ -3245,7 +3254,6 @@ GET /api/payment/logs?shopName=basket&username=fresh_basket&sortDate=desc&page=1
 | `401` | Missing or invalid JWT | `"Unauthorized: Authentication token is missing"` |
 | `403` | Role is not `admin` | `"Forbidden. Your account role does not have permission to access this resource."` |
 | `500` | Unexpected DB error | `"Internal server error"` |
-
 ---
 
 ### Required Environment Variables for Payment

@@ -109,11 +109,11 @@ export async function findAllPaymentLogsFiltered({ shopName, username, sortDirec
         .limit(limit)
         .populate({
             path: "vendorId",
-            select: "shopName taxNumber authId", // authId needed to look up username
+            select: "shopName taxNumber phoneNumber address authId", // authId needed to look up username
             populate: {
                 path: "authId",
                 model: "UsersAuth",
-                select: "username", // Only pull the username field
+                select: "username email", // Only pull the username field
             },
         })
         .lean();
@@ -125,6 +125,9 @@ export async function findAllPaymentLogsFiltered({ shopName, username, sortDirec
             _id: log.vendorId?._id,
             shopName: log.vendorId?.shopName,
             taxNumber: log.vendorId?.taxNumber,
+            phoneNumber: log.vendorId?.phoneNumber || null,
+            address: log.vendorId?.address || null,
+            email: log.vendorId?.authId?.email || null,
             username: log.vendorId?.authId?.username || null,
         },
     }));
