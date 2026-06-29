@@ -22,30 +22,8 @@ import {
 export const initiatePayment = async (req, res, next) => {
     try {
         const vendorId = req.user.id;
-        const { vendorFullName, vendorEmail, vendorPhone } = req.body;
 
-        // Build Paymob's required billing_data block.
-        // Paymob needs first_name and last_name separately — split on the first space.
-        const nameParts = vendorFullName.trim().split(" ");
-        const billingData = {
-            first_name: nameParts[0],
-            last_name: nameParts.slice(1).join(" ") || nameParts[0], // fallback if single name
-            email: vendorEmail,
-            phone_number: vendorPhone,
-            // The fields below are required by Paymob's schema but not relevant
-            // for a vendor-to-platform payment — filled with NA placeholders.
-            apartment: "NA",
-            floor: "NA",
-            street: "NA",
-            building: "NA",
-            shipping_method: "NA",
-            postal_code: "NA",
-            city: "NA",
-            country: "EGY",
-            state: "NA",
-        };
-
-        const result = await initiateVendorPayment(vendorId, billingData);
+        const result = await initiateVendorPayment(vendorId);
 
         return res.status(200).json({
             success: true,

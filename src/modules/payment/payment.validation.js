@@ -4,17 +4,6 @@
 // We ask the vendor to input them explicitly rather than silently pulling from the DB,
 // because payment receipts should reflect what the payer consciously provides.
 export const validateInitiatePayment = (req, res, next) => {
-    const { vendorFullName, vendorEmail, vendorPhone } = req.body;
-
-    if (!vendorFullName || typeof vendorFullName !== "string" || vendorFullName.trim() === "") {
-        return res.status(400).json({ message: "vendorFullName is required" });
-    }
-    if (!vendorEmail || typeof vendorEmail !== "string" || vendorEmail.trim() === "") {
-        return res.status(400).json({ message: "vendorEmail is required" });
-    }
-    if (!vendorPhone || typeof vendorPhone !== "string" || vendorPhone.trim() === "") {
-        return res.status(400).json({ message: "vendorPhone is required" });
-    }
-
+    // Data is now pulled completely from the database server-side for safety.
     next();
 };
