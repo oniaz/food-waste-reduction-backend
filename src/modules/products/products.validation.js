@@ -110,7 +110,7 @@ export const validateCreateProduct = (req, res, next) => {
 
     // 8. discount validation
     if (discount !== undefined && !isNaN(discount)) {
-        if (typeof discount !== "number" || discount < 0 || discount > price) {
+        if (typeof discount !== "number" || discount < 0 ) {
             return res.status(400).json({
                 success: false,
                 message: "Discount must be between 0 and the product price",
