@@ -51,8 +51,20 @@ export const countAllLogs = () =>
     Logs.countDocuments();
 
 export const findAllLogs = (skip, limit) =>
-    Logs.find().sort({ createdAt: -1 }).skip(skip).limit(limit).lean();
+     Logs.find()
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate({
+            path: 'adminId',          // 1. Populate the admin details
+            populate: {
+                path: 'authId',       // 2. Deep populate the auth details inside admin
+                select: 'username'    // 3. Only grab the username field
+            }
+        })
+        .lean();
 
+  
 export const countLogsByAdmin = (adminId) =>
     Logs.countDocuments({ adminId });
 

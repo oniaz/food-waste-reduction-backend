@@ -150,6 +150,8 @@ export const getAllProducts = async (filters) => {
     if (filters?.sort === "price_asc") sortStage = { finalPrice: 1 };
     if (filters?.sort === "price_desc") sortStage = { finalPrice: -1 };
     if (filters?.sort === "discount_desc") sortStage = { discount: -1 };
+    if (filters?.sort === "expiry_asc")    sortStage = { expiryDate: 1 };
+    if (filters?.sort === "expiry_des")    sortStage = { expiryDate: -1 };
 
     // Post-lookup filters that require vendor data or finalPrice
     const postMatchStage = {};
