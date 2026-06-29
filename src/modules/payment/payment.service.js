@@ -28,7 +28,7 @@ async function createPaymobIntention(amountCents, billingData, vendorId) {
             billing_data: billingData,
             
             // ⬇️ THIS TELLS PAYMOB WHERE TO SEND THE BROWSER ONCE COMPLETED ⬇️
-            redirection_url: "https://platinum-valium-entwine.ngrok-free.dev/api/payment/callback",
+            redirection_url: `${process.env.BACKEND_URL}/api/payment/callback`,
 
             // Embed vendorId in the reference so the webhook can identify who paid
             special_reference: `vendor-${vendorId}-${Date.now()}`,
