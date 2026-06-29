@@ -89,12 +89,15 @@ export const handleWebhook = async (req, res, next) => {
 /**
  * GET /api/payment/callback
  * Paymob redirects the vendor's browser here after the payment flow completes.
- * Secure Fallback: If webhook fails to fire, handles balance settlement directly.
+ * Secure Fallback: Settles balance and sends the user back to the React frontend.
  *
  * @route GET /api/payment/callback
  * @access public (browser redirect from Paymob)
  */
 export const paymentCallback = async (req, res, next) => {
+    // Define your Frontend App URL (Use an environment variable for deployment!)
+    const FRONTEND_URL = process.env.FRONTEND_APP_URL || "http://localhost:5173"; 
+
     try {
         console.log("=== PAYMOB REDIRECT CALLBACK ACCESSED ===");
         
@@ -106,7 +109,7 @@ export const paymentCallback = async (req, res, next) => {
             currency,
             extra_fields,
             intention_order_id,
-            merchant_order_id
+            merchant_order_id 
         } = req.query;
 
         console.log(`Callback query parameters received - Tx ID: ${transactionId}, Success: ${success}`);
@@ -127,7 +130,7 @@ export const paymentCallback = async (req, res, next) => {
                     const parsedExtras = typeof extra_fields === 'string' ? JSON.parse(extra_fields) : extra_fields;
                     vendorId = parsedExtras.vendorId;
                 } catch (e) {
-                    console.log("Could not parse stringified extra_fields json attribute.");
+                    console.log("Could not parse stringified extra_fields attributes.");
                 }
             }
 
@@ -161,31 +164,19 @@ export const paymentCallback = async (req, res, next) => {
             // Run your service worker process right here synchronously to clear the balance safely
             await processPaymentWebhook(fallbackTransactionPayload);
             
-            console.log("✅ Database balance settlement fallback successfully completed.");
+            console.log("✅ Fallback settlement complete. Redirecting client to frontend success page...");
 
-            return res.status(200).json({
-                success: true,
-                message: "Payment successful! Your balance has been cleared via secure fallback. 🎉",
-                transactionId,
-            });
+            //  REDIRECT TO FRONTEND SUCCESS PAGE
+            return res.redirect(`${FRONTEND_URL}/payment-success?status=success&tx=${transactionId}`);
         }
 
-        // If the payment failed
-        return res.status(200).json({
-            success: false,
-            message: "Payment was not completed. Please try again.",
-            transactionId,
-        });
+        //  REDIRECT TO FRONTEND FAILURE/CANCEL PAGE
+        return res.redirect(`${FRONTEND_URL}/payment-failed?status=failed&tx=${transactionId}`);
 
     } catch (error) {
-        console.error("Error handling payment callback fallback execution:", error.message);
-        // Fallback safely to display whatever state we can
-        return res.status(200).json({
-            success: false,
-            message: "Payment response received, but an error occurred updating your balance.",
-            error: error.message,
-            transactionId: req.query.id
-        });
+        console.error("Error handling payment callback execution:", error.message);
+        // If an error happens, still send them back to frontend with the error info
+        return res.redirect(`${FRONTEND_URL}/payment-failed?status=error&message=${encodeURIComponent(error.message)}`);
     }
 };
 

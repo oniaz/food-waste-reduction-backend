@@ -2843,22 +2843,22 @@ GET /api/locations
 
 ```
 1. Vendor → POST /api/payment/initiate
-        Server reads moneyOwed from DB, creates Paymob intention for that exact amount
-        Returns hosted checkout URL
-
+Server reads moneyOwed from DB, creates Paymob intention for that exact amount
+Returns hosted checkout URL
 2. Vendor completes card payment on Paymob's hosted page
 
 3. Paymob → POST /api/payment/webhook  (HMAC verified)
-        moneyOwed set to 0
-        VendorPaymentLog entry written (immutable audit record)
-
-4. Paymob redirects vendor browser → GET /api/payment/callback  (display only)
-
+Runs asynchronously via background worker (waitUntil)
+moneyOwed set to 0
+VendorPaymentLog entry written (immutable audit record)
+4. Paymob redirects vendor browser → GET /api/payment/callback
+Parses query context, acts as a synchronous fallback settlement pipeline to double-verify
+clearing the balance, and issues an HTTP redirect to the React frontend
 5. Vendor → GET /api/payment/my-history   (see own payment history)
-   Admin → GET /api/payment/logs           (see all vendors' payment history)
+Admin → GET /api/payment/logs           (see all vendors' payment history)
 ```
 
-> **Important:** `moneyOwed` is only zeroed by the webhook — never by the callback redirect. The callback is browser-facing and display-only.
+> **Important:** While `moneyOwed` is primarily processed by the webhook, the browser callback (`/api/payment/callback`) acts as a critical golden fallback safety mechanism. If it detects a successful query string from Paymob, it will manually parse the `vendorId` (via query params, stringified extras, or splitting the `merchant_order_id`) and handle database resolution inline before redirecting to the frontend UI.
 
 ### VendorPaymentLog Document Shape
 
@@ -2923,7 +2923,7 @@ POST /api/payment/initiate
 ```json
 {
   "success": true,
-  "paymentUrl": "https://accept.paymobsolutions.com/unifiedcheckout/?publicKey=egy_pk_...&clientSecret=...",
+  "paymentUrl": "[https://accept.paymobsolutions.com/unifiedcheckout/?publicKey=egy_pk_...&clientSecret=](https://accept.paymobsolutions.com/unifiedcheckout/?publicKey=egy_pk_...&clientSecret=)...",
   "intentionId": "pay_intention_abc123",
   "amountEGP": 340.50,
   "amountCents": 34050,
@@ -2955,16 +2955,19 @@ POST /api/payment/initiate
 
 Paymob calls this endpoint after every transaction attempt (success or failure). The request is verified by the `verifyPaymobHmac` middleware before the controller runs — any request with an invalid or missing HMAC signature is rejected with `401`.
 
+**Background Execution Process:**
+To ensure high availability and stay within platform execution limits, the webhook controller hands off processing to a background task runner using Vercel's `waitUntil` pipeline and responds immediately.
+
 **On a successful transaction (`success === true`):**
 1. Checks for duplicate delivery using `paymobTransactionId` (Paymob retries on non-`200` responses).
-2. Extracts `vendorId` from `intention_order_data.extras.vendorId` (embedded at intention creation).
+2. Extracts `vendorId` from `intention_order_data.extras.vendorId` or top-level `extra.vendorId`.
 3. Snapshots the vendor's current `moneyOwed` as `previousBalance`.
-4. Sets `vendor.moneyOwed` to `0`.
+4. Sets `vendor.moneyOwed` to `0` atomically.
 5. Creates an immutable `VendorPaymentLog` entry.
 
-**On a failed transaction:** logs and returns `200` with `processed: false` — no DB changes.
+**On a failed transaction:** skips processing — no DB changes are made.
 
-> This endpoint always returns `200` even on processing errors to prevent Paymob from retrying indefinitely. Internal errors are logged server-side.
+> This endpoint always returns an HTTP `200` object response with `{ "received": true }` even if exceptions or processing errors occur. This prevents Paymob from stalling workflows or retrying indefinitely. Internal exceptions are safely logged to system errors for administration.
 
 #### Request Details
 
@@ -3010,48 +3013,23 @@ Paymob calls this endpoint after every transaction attempt (success or failure).
 }
 ```
 
-#### Success Response — `200 OK` (transaction successful, processed)
+#### Success Response — `200 OK`
 
 ```json
 {
-  "success": true,
-  "received": true,
-  "processed": true,
-  "vendorId": "664a1f3e2b7c8d9e0f123456",
-  "amountPaidEGP": 340.50,
-  "previousBalance": 340.50
+  "received": true
 }
 ```
 
-#### Success Response — `200 OK` (failed transaction, not processed)
+#### Error Handled Response — `200 OK` (Internal Exception Caught)
 
 ```json
 {
-  "success": true,
   "received": true,
-  "processed": false,
-  "reason": "transaction_not_successful"
+  "error": "Webhook missing vendorId in extras"
 }
+
 ```
-
-#### Success Response — `200 OK` (duplicate webhook, ignored)
-
-```json
-{
-  "success": true,
-  "received": true,
-  "processed": false,
-  "reason": "duplicate"
-}
-```
-
-#### Error Responses
-
-| Status | Scenario | Message |
-|---|---|---|
-| `400` | `hmac` query param missing | `"Missing HMAC in query string"` |
-| `400` | `obj` field missing from body | `"Missing transaction object in webhook body"` |
-| `401` | HMAC signature does not match | `"Invalid HMAC signature"` |
 
 ---
 
@@ -3059,7 +3037,12 @@ Paymob calls this endpoint after every transaction attempt (success or failure).
 
 #### Description
 
-Paymob redirects the vendor's browser to this URL after the payment flow completes (whether successful or not). This endpoint is **display-only** — it does not update any database records. All fulfillment happens via the webhook.
+Paymob redirects the vendor's browser to this URL after completing checkout. This route acts as a **browser redirection interface** and secure verification layer. It parses transaction statuses from URL parameters and dynamically handles error states or successes.
+
+**Fallback Pipeline Operations:**
+If Paymob reports `success=true`, the endpoint triggers a synchronous fallback verification pipeline right away. It searches for `vendorId` through multiple payload variations (`query.vendorId`, nested object strings inside `extra_fields`, or parsed directly out of `merchant_order_id` via `"vendor-ID-timestamp"` splitting format).
+
+It then reconstructs the full context payload structure and explicitly runs the database ledger completion workflow synchronously to clear balances immediately, prior to moving the user out of the backend stack.
 
 #### Request Details
 
@@ -3068,40 +3051,23 @@ Paymob redirects the vendor's browser to this URL after the payment flow complet
 | **Method & URL** | `GET /api/payment/callback` |
 | **Auth required** | No — public browser redirect from Paymob |
 
-**Query Parameters (appended by Paymob)**
+**Query Parameters (appended by Paymob URL parameters)**
 
-| Parameter | Type | Notes |
-|---|---|---|
-| `success` | string | `"true"` or `"false"` |
-| `id` | string | Paymob transaction ID |
+| Parameter | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `success` | string | Yes | `"true"` or `"false"` status string |
+| `id` | string | Yes | Transaction ID identifier |
+| `amount_cents` | string | No | Calculated integer amount value in cents units |
+| `currency` | string | No | String name currency type fallback (Defaults to `"EGP"`) |
+| `merchant_order_id` | string | No | Platform order reference template string format (`vendor-ID-timestamp`) |
 
-**Request Example**
+#### Output Response — HTTP `302 Redirect`
 
-```
-GET /api/payment/callback?success=true&id=98765432
-```
+This endpoint does not output raw text data response structures; it redirects user browser profiles directly to frontend application routes using your configure paths:
 
-#### Success Response — `200 OK`
-
-```json
-{
-  "success": true,
-  "message": "Payment successful! Your balance has been cleared. 🎉",
-  "transactionId": "98765432",
-  "note": "Balance update is handled via webhook — this page is for display only."
-}
-```
-
-#### Failed Payment Response — `200 OK`
-
-```json
-{
-  "success": true,
-  "message": "Payment was not completed. Please try again.",
-  "transactionId": "98765432",
-  "note": "Balance update is handled via webhook — this page is for display only."
-}
-```
+* **Successful Payments Redirect Target:** `${FRONTEND_APP_URL}/payment-success?status=success&tx={transactionId}`
+* **Failed/Cancelled Payments Redirect Target:** `${FRONTEND_APP_URL}/payment-failed?status=failed&tx={transactionId}`
+* **Runtime System Error Redirect Target:** `${FRONTEND_APP_URL}/payment-failed?status=error&message={encodedErrorMessage}`
 
 ---
 
@@ -3266,6 +3232,8 @@ Add these to your `.env` file:
 | `PAYMOB_PUBLIC_KEY` | Public key from Paymob dashboard — embedded in the hosted checkout URL |
 | `PAYMOB_INTEGRATION_ID` | The integration ID of your card payment method in Paymob |
 | `PAYMOB_HMAC_SECRET` | HMAC secret from Paymob dashboard — used to verify webhook signatures |
+| `BACKEND_URL` | Base host URL configuration for the backend system layer environment setup |
+| `FRONTEND_APP_URL` | Application endpoint address targets representing your client web user interface portal (Defaults to `http://localhost:5173`) |
 
 ---
 
