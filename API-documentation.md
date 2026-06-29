@@ -1557,7 +1557,7 @@ finalPrice = (price + commission) - (price × discount / 100)
 | `city` | string | No | Case-insensitive regex on `vendor.address.city` |
 | `governorate` | string | No | Case-insensitive regex on `vendor.address.governorate` |
 | `neighborhood` | string | No | Case-insensitive regex on `vendor.address.neighborhood` |
-| `sort` | string | No | `"price_asc"`, `"price_desc"`, `"discount_desc"`. Default: `expiryDate` ascending |
+| `sort` | string | No | `"price_asc"`, `"price_desc"`, `"discount_desc"` ,`"expiry_asc"`, `"expiry_des"` . Default: `expiryDate` ascending |
 | `page` | integer | No | Default: `1` |
 | `limit` | integer | No | Default: `10` |
 
