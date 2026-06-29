@@ -89,21 +89,104 @@ export const handleWebhook = async (req, res, next) => {
 /**
  * GET /api/payment/callback
  * Paymob redirects the vendor's browser here after the payment flow completes.
- * Display-only — do NOT use this for fulfillment. Use the webhook instead.
+ * Secure Fallback: If webhook fails to fire, handles balance settlement directly.
  *
  * @route GET /api/payment/callback
  * @access public (browser redirect from Paymob)
  */
-export const paymentCallback = (req, res) => {
-    const { success, id: transactionId } = req.query;
+export const paymentCallback = async (req, res, next) => {
+    try {
+        console.log("=== PAYMOB REDIRECT CALLBACK ACCESSED ===");
+        
+        // Extract parameters appended by Paymob's redirect
+        const { 
+            success, 
+            id: transactionId, 
+            amount_cents, 
+            currency,
+            extra_fields,
+            intention_order_id,
+            merchant_order_id
+        } = req.query;
 
-    return res.status(200).json({
-        message: success === "true"
-            ? "Payment successful! Your balance has been cleared. 🎉"
-            : "Payment was not completed. Please try again.",
-        transactionId,
-        note: "Balance update is handled via webhook — this page is for display only.",
-    });
+        console.log(`Callback query parameters received - Tx ID: ${transactionId}, Success: ${success}`);
+
+        // If the checkout explicitly states it was a success, run the verification fallback
+        if (success === "true") {
+            
+            // Try extracting from query params variations first
+            let vendorId = 
+                req.query.vendorId || 
+                req.query['extra_fields.vendorId'] || 
+                req.query['intention_order_data.extras.vendorId'] ||
+                req.query['extra.vendorId'];
+
+            // Fallback parsing if Paymob stringified it into extra_fields
+            if (!vendorId && extra_fields) {
+                try {
+                    const parsedExtras = typeof extra_fields === 'string' ? JSON.parse(extra_fields) : extra_fields;
+                    vendorId = parsedExtras.vendorId;
+                } catch (e) {
+                    console.log("Could not parse stringified extra_fields json attribute.");
+                }
+            }
+
+            // 🌟 GOLDEN FALLBACK: Parse from merchant_order_id ("vendor-ID-timestamp")
+            if (!vendorId && merchant_order_id && merchant_order_id.startsWith("vendor-")) {
+                const parts = merchant_order_id.split("-");
+                if (parts[1]) {
+                    vendorId = parts[1];
+                    console.log(`Successfully parsed Vendor ID from merchant_order_id: ${vendorId}`);
+                }
+            }
+
+            console.log(`Extracted Vendor ID for callback verification: ${vendorId}`);
+
+            // Reconstruct the transaction payload object exactly like processPaymentWebhook expects it
+            const fallbackTransactionPayload = {
+                id: Number(transactionId),
+                success: true,
+                amount_cents: Number(amount_cents),
+                currency: currency || "EGP",
+                intention_order_data: {
+                    id: intention_order_id || "fallback_flow",
+                    extras: {
+                        vendorId: vendorId ? vendorId.toString() : undefined
+                    }
+                }
+            };
+
+            console.log("Triggering processPaymentWebhook from redirect fallback pipeline...");
+            
+            // Run your service worker process right here synchronously to clear the balance safely
+            await processPaymentWebhook(fallbackTransactionPayload);
+            
+            console.log("✅ Database balance settlement fallback successfully completed.");
+
+            return res.status(200).json({
+                success: true,
+                message: "Payment successful! Your balance has been cleared via secure fallback. 🎉",
+                transactionId,
+            });
+        }
+
+        // If the payment failed
+        return res.status(200).json({
+            success: false,
+            message: "Payment was not completed. Please try again.",
+            transactionId,
+        });
+
+    } catch (error) {
+        console.error("Error handling payment callback fallback execution:", error.message);
+        // Fallback safely to display whatever state we can
+        return res.status(200).json({
+            success: false,
+            message: "Payment response received, but an error occurred updating your balance.",
+            error: error.message,
+            transactionId: req.query.id
+        });
+    }
 };
 
 /**

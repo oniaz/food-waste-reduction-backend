@@ -13,7 +13,7 @@ export const clearVendorMoneyOwed = (vendorId) =>
     Vendors.findByIdAndUpdate(
         vendorId,
         { $set: { moneyOwed: 0 } },
-        { new: true, runValidators: true }
+        { returnDocument: "after", runValidators: true } // Cleaned up the deprecated warning
     );
 
 // ── Payment Logs ──────────────────────────────────────────────────────────────
