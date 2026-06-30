@@ -5,6 +5,7 @@
 // DELETE /products/:id | Auth required (vendor owner, admin) | delete product
 // GET /products/search?q= | Public | search products
 // POST /products/recommendation | Auth required (customer) | AI-based product recommendations
+// GET /products/:id/suggest-discount | Auth required (vendor owner) | AI-suggested discount percentage
 
 import express from "express";
 import * as productController from "./products.controller.js";
@@ -15,7 +16,7 @@ import {
 } from "./products.validation.js";
 import authMiddleware from "../../middleware/authentication.middleware.js";
 import authorizeRole from "../../middleware/authorization.middleware.js";
-import { aiRecommendationLimiter, aiCreateLimiter } from "../../middleware/rateLimit.middleware.js";
+import { aiRecommendationLimiter, aiCreateLimiter, aiDiscountSuggestionLimiter, } from "../../middleware/rateLimit.middleware.js";
 import { uploadMiddleware } from "../../middleware/upload.middleware.js";
 import authorizeStatus from "../../middleware/status.middleware.js";
 
@@ -64,6 +65,16 @@ router.post(
     aiRecommendationLimiter,
     validateRecommendCartItems,
     productController.recommend
+);
+
+router.get(
+    "/:id/suggest-discount",
+    authMiddleware,
+    authorizeRole("vendor"),
+    authorizeStatus("active"),
+    aiDiscountSuggestionLimiter,
+    validateProductIdParam,
+    productController.suggestDiscount
 );
 
 export default router;

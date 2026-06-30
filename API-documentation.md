@@ -48,6 +48,7 @@
    - 5.6 [Update Product](#56-put-apiproductsid)
    - 5.7 [Delete Product](#57-delete-apiproductsid)
    - 5.8 [Get AI Recommendations](#58-post-apiproductsrecommendations)
+   - 5.9 [Get AI Discount Suggestion](#59-get-apiproductsidsuggest-discount)
 6. [Order Endpoints `GET|POST|PATCH /api/orders/...`](#6-order-endpoints)
    - 6.1 [Create Order](#61-post-apiorders)
    - 6.2 [Get My Orders (Customer)](#62-get-apiordersmy-orders)
@@ -142,6 +143,7 @@ authenticate → authorizeRole("vendor") → authorizeStatus("active")
 | `authLimiter` | 10 min | 5 | Per IP | `POST /api/auth/login` |
 | `aiCreateLimiter` | 1 min | 4 | Global bucket | `POST /api/products` (create) |
 | `aiRecommendationLimiter` | 1 min | 6 | Global bucket | `POST /api/products/recommendations` |
+| `aiDiscountSuggestionLimiter` | 1 min | 4 | Global bucket | `GET /products/:id/suggest-discount` |
 
 > **Global bucket** means all users share one counter — it is not per-IP.
 
@@ -2152,6 +2154,61 @@ POST /api/products/recommendations
 | `totalPriceBeforeDiscount` | `Σ (basePrice + commission) × quantity` |
 | `totalDiscount` | `Σ (discount% × price / 100) × quantity` |
 | `finalPrice` | `totalPriceBeforeDiscount − totalDiscount` (floored at `0`) |
+
+---
+### 5.9 `GET /api/products/:id/suggest-discount`
+
+#### Description
+
+Suggests an optimal whole-number discount percentage (between 0% and 100%) for a product nearing expiry using an AI-powered cascade mechanism (Gemini Flash → Groq Llama 8B). The response includes a brief, single-sentence reasoning justifying the number based on remaining quantity and days until expiry. 
+
+Product ownership is strictly checked; only the authenticated vendor who owns the product can request and view suggestions for it.
+
+**Rate limit:** 4 requests/minute (global AI bucket — shared across all users).
+
+#### Request Details
+
+| | |
+|---|---|
+| **Method & URL** | `GET /api/products/:id/suggest-discount` |
+| **Auth required** | Yes — role: `vendor`; status: `active` |
+| **Content-Type** | `application/json` |
+| **Rate limit** | 4 req/min (global AI bucket) |
+| **Cookie** | `token=<JWT>` |
+
+**Route Parameters**
+
+| Parameter | Type | Required | Notes |
+|---|---|---|---|
+| `id` | ObjectId string | Yes | `_id` of the product to analyze |
+
+**Request Body:** None.
+
+**Request Example**
+
+GET /api/products/664a1f3e2b7c8d9e0f123456/suggest-discount
+#### Success Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "productId": "664a1f3e2b7c8d9e0f123456",
+    "currentDiscount": 10,
+    "suggestedDiscount": 25,
+    "reasoning": "Expires in 2 days with high stock remaining, so a strong discount will help clear it in time.",
+    "daysUntilExpiry": 2,
+    "source": "gemini"
+  }
+}
+Error Responses
+Status	Scenario	Message
+401	Missing or invalid JWT cookie	"Unauthorized: Authentication token is missing"
+403	Role is not vendor	"Forbidden. Your account role does not have permission to access this resource."
+403	Account status is not active	"Forbidden. Your account status does not have permission to access this resource."
+403	Vendor does not own this product	"You are not allowed to view suggestions for this product"
+404	Product ID does not exist in the database	"Product not found"
+503	Both Gemini and Groq services fail or are unavailable	"AI pricing assistant is currently unavailable. Please try again shortly."
 
 ---
 
