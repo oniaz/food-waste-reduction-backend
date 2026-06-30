@@ -81,7 +81,7 @@ export async function updateVendorStatus(authId, vendorId, newStatus) {
         adminId: adminProfile._id, // Now referencing the real '_id' from the Admin collection
         userId: vendorProfile.authId, // Targets 'UsersAuth' of the vendor being updated
         action: logAction,
-        description: `Changed vendor with Id ${vendorId} status from '${previousStatus}' to '${newStatus}'.`,
+        description: `Changed vendor of shop ${vendorProfile.shopName}  with username: ${currentAuth.username} status from '${previousStatus}' to '${newStatus}'.`,
     });
 
     // Send status change notification email
@@ -160,7 +160,7 @@ export async function updateCustomerStatus(authId, customerId, newStatus) {
         adminId: adminProfile._id,
         userId: customerProfile.authId, // Targets 'UsersAuth' of the customer being updated
         action: logAction,
-        description: `Changed customer with Id ${customerId} status from '${previousStatus}' to '${newStatus}'.`,
+        description: `Changed customer ${customerProfile.name.firstName} ${customerProfile.name.lastName} with username: ${currentAuth.username} status from '${previousStatus}' to '${newStatus}'.`,
     });
 
     // Send status change notification email
