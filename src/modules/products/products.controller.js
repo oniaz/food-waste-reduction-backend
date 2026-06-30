@@ -1,5 +1,6 @@
 import * as productService from "./products.service.js";
 import * as recommendationService from "./products.recommendation.service.js";
+import { suggestDiscountForProduct } from "./products.discountSuggestion.service.js";
 import { findProductById } from "./products.repository.js";
 import {
     uploadToCloudinary,
@@ -186,6 +187,27 @@ export const recommend = async (req, res, next) => {
 export const getCategories = async (req, res, next) => {
     try {
         return res.status(200).json({ success: true, data: CATEGORY_CONFIG });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Suggest an optimal discount percentage for a product nearing expiry
+ * @route GET /products/:id/suggest-discount
+ * ID format validation is handled by validateProductIdParam middleware.
+ * Ownership is NOT enforced here — any authenticated vendor can preview a
+ * suggestion, but only the owning vendor's PUT /products/:id call can apply it.
+ * @param {Object} req - Express request object (params: id)
+ * @param {Object} res - Express response object
+ * @param {Function} next - Next middleware
+ * @returns {JSON} Suggested discount percentage with reasoning, or 503 if AI is unavailable
+ */
+export const suggestDiscount = async (req, res, next) => {
+    try {
+        const suggestion = await suggestDiscountForProduct(req.params.id, req.user.id);
+
+        res.status(200).json({ success: true, data: suggestion });
     } catch (error) {
         next(error);
     }
