@@ -74,7 +74,7 @@ export const handleWebhook = async (req, res, next) => {
  */
 export const paymentCallback = async (req, res, next) => {
     // Define your Frontend App URL (Use an environment variable for deployment!)
-    const FRONTEND_URL = process.env.FRONTEND_APP_URL || "http://localhost:5173"; 
+    const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173"; 
 
     try {
         console.log("=== PAYMOB REDIRECT CALLBACK ACCESSED ===");

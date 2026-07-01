@@ -3122,9 +3122,9 @@ It then reconstructs the full context payload structure and explicitly runs the 
 
 This endpoint does not output raw text data response structures; it redirects user browser profiles directly to frontend application routes using your configure paths:
 
-* **Successful Payments Redirect Target:** `${FRONTEND_APP_URL}/payment-success?status=success&tx={transactionId}`
-* **Failed/Cancelled Payments Redirect Target:** `${FRONTEND_APP_URL}/payment-failed?status=failed&tx={transactionId}`
-* **Runtime System Error Redirect Target:** `${FRONTEND_APP_URL}/payment-failed?status=error&message={encodedErrorMessage}`
+* **Successful Payments Redirect Target:** `${FRONTEND_URL}/payment-success?status=success&tx={transactionId}`
+* **Failed/Cancelled Payments Redirect Target:** `${FRONTEND_URL}/payment-failed?status=failed&tx={transactionId}`
+* **Runtime System Error Redirect Target:** `${FRONTEND_URL}/payment-failed?status=error&message={encodedErrorMessage}`
 
 ---
 
@@ -3290,7 +3290,7 @@ Add these to your `.env` file:
 | `PAYMOB_INTEGRATION_ID` | The integration ID of your card payment method in Paymob |
 | `PAYMOB_HMAC_SECRET` | HMAC secret from Paymob dashboard — used to verify webhook signatures |
 | `BACKEND_URL` | Base host URL configuration for the backend system layer environment setup |
-| `FRONTEND_APP_URL` | Application endpoint address targets representing your client web user interface portal (Defaults to `http://localhost:5173`) |
+| `FRONTEND_URL` | Application endpoint address targets representing your client web user interface portal (Defaults to `http://localhost:5173`) |
 
 ---
 
