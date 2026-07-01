@@ -26,6 +26,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const isVercel = Boolean(process.env.VERCEL);
 
+app.set('trust proxy', 1);
+
 // 1. Middleware
 app.use(morgan("dev"));
 app.use(express.json());
