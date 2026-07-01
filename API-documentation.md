@@ -2,7 +2,7 @@
 
 > **Version:** 1.0.0
 > **Stack:** Node.js · Express 5 · MongoDB / Mongoose · JWT (HTTP-only cookie) · Cloudinary · Gemini 2.5 Flash · Groq Llama 3.1 8B · Paymob
-> **Base URL:** `https://<your-domain>/api`
+> **Base URL:** `https://food-waste-reduction-backend.vercel.app/api`
 > **Deployment:** Vercel (serverless) — `app` is exported as default for the Vercel handler
 
 ---
