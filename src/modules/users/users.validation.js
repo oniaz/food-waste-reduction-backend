@@ -5,7 +5,7 @@ import {
     validateAddress,
     validatePickupTime,
     validateMapCoordinates,
-} from "../../utils/userDataValidators.js";
+} from "../../utils/validators.js";
 
 // Validates shape and format of profile update fields only.
 // Does NOT read req.user.role — role-based field filtering is the controller's job.

@@ -8,7 +8,7 @@ import {
     validateShopName,
     validateTaxNumber,
     validateName,
-} from "../../utils/userDataValidators.js";
+} from "../../utils/validators.js";
 
 // Validates shape and format only.
 // Duplicate username + duplicate tax number checks are business rules
