@@ -42,8 +42,14 @@ const normalizeDiscount = (rawDiscount, currentDiscount) => {
  * Builds the prompt fed to the AI, using only data already on the product document.
  */
 const buildPrompt = (product, daysUntilExpiry) => `
-You are a pricing assistant for a surplus food marketplace fighting food waste.
+You are a pricing assistant for a surplus food marketplace in Egypt fighting food waste.
 A vendor wants to know what discount percentage to apply to this product to maximize the chance it sells before it expires, without giving away unnecessary margin.
+
+Market context:
+- All prices are in Egyptian Pounds (EGP)
+- This is the Egyptian market — factor in local price sensitivity and purchasing power
+- Egyptian consumers are generally price-sensitive; even a 10–15% discount can significantly increase purchase likelihood for affordable items, while premium-priced items may need steeper discounts to move quickly
+- The platform sells surplus/near-expiry food, so buyers expect deals but vendors still need to cover costs
 
 Product details:
 - Name: ${product.productName}
@@ -57,6 +63,7 @@ Product details:
 Guidance:
 - More days until expiry and low quantity → lower or no discount needed.
 - Few days until expiry and/or high remaining quantity → higher discount needed to move stock fast.
+- Consider whether the base price is high or low relative to typical Egyptian food prices when calibrating the suggestion.
 - Discount must be a whole number between 0 and 100 (percentage off the base price).
 - Briefly justify the number in one short sentence.
 
