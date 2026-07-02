@@ -13,9 +13,13 @@ export function attachOrderSummary(order) {
 
     order.products.forEach((item) => {
         const quantity = item.quantity || 0;
-        // Fallback to schema values if product document populated successfully
-        const basePrice = (item.productId?.price || item.priceAtPurchase) + (item.productId?.commission);
-        const itemDiscount = (item.productId?.discount || 0) * (item.productId?.price) * 0.01;
+        const populatedPrice = item.productId?.price;
+        const basePrice = populatedPrice != null
+            ? Number(populatedPrice) + Number(item.productId?.commission || 0)
+            : Number(item.priceAtPurchase || 0);
+        const itemDiscount = populatedPrice != null
+            ? Number(item.productId?.discount || 0) * Number(populatedPrice) * 0.01
+            : 0;
 
         totalPriceBeforeDiscount += basePrice * quantity;
         totalDiscount += itemDiscount * quantity;
@@ -160,18 +164,11 @@ export async function getCustomerOrders(customerId, incomingStatus, page, limit)
 export async function getOrdersForVendor(vendorId, incomingStatus, page, limit) {
     const skip = (page - 1) * limit;
 
-    const vendorProductIds = await ordersRepo.getDistinctProductIdsByVendor(vendorId); // Get array of all product IDs that belong to this vendor , distinct is used to optimize the query by only returning unique product IDs instead of full product documents
-
-    if (vendorProductIds.length === 0) { //if no products, then no orders can contain vendor products
-        return { orders: [], totalOrders: 0 };
-    }
-
     const queryFilter = buildStatusFilter(
-        { "products.productId": { $in: vendorProductIds } },
+        { "products.vendorId": vendorId },
         incomingStatus
     );
 
-    //Find orders containing any of those product IDs using $in operator
     const totalOrders = await ordersRepo.countOrdersByFilter(queryFilter);
     const orders = await ordersRepo.findOrdersByFilterWithCustomerPopulate(
         queryFilter,
@@ -202,7 +199,7 @@ export async function getOrderDetails(orderId, currentUserId, currentUserRole) {
     const isVendorInvolved =
         currentUserRole === "vendor" &&
         orderDoc.products.some((item) => {
-            const vendorRef = item.productId?.vendorId;
+            const vendorRef = item.vendorId || item.productId?.vendorId;
             if (!vendorRef) return false;
 
             const vendorStrId =
@@ -370,6 +367,8 @@ export async function rateCompletedOrder(orderId, customerId, rating) {
             order.products
                 .map(
                     (item) =>
+                        item.vendorId?._id?.toString() ||
+                        item.vendorId?.toString() ||
                         item.productId?.vendorId?._id?.toString() ||
                         item.productId?.vendorId?.toString()
                 )
