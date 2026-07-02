@@ -12,6 +12,15 @@ const orderSchema = new mongoose.Schema({
             ref: 'Products', // Targets your exported Products model name
             required: true
         },
+        productRefId: {
+            type: String,
+            required: true,
+        },
+        productName: {
+            type: String,
+            required: true,
+            trim: true,
+        },
         vendorId: {  //added for better vendor analytics
             type: mongoose.Schema.Types.ObjectId, 
             ref: 'Vendors',

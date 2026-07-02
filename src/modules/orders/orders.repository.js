@@ -17,20 +17,10 @@ export const findOrderByIdPopulatedForDetail = (id) =>
             path: "customerId",
             select: "name phoneNumber address",
         })
-        .populate({
-            path: "products.productId",
-            select: "price discount commission",
-            populate: {
-                path: "vendorId",
-                select: "shopName phoneNumber address pickupTime",
-            },
-        });
+        ;
 
 export const findOrderByIdPopulatedForRating = (id) =>
-    Order.findById(id).populate({
-        path: "products.productId",
-        select: "vendorId",
-    });
+    Order.findById(id);
 
 export const findAndUpdateOrderStatus = (id, status) =>
     Order.findByIdAndUpdate(
@@ -57,15 +47,13 @@ export const findOrdersByFilterWithCustomerPopulate = (filter, skip, limit) =>
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate({ path: "customerId", select: "name phoneNumber address" })
-        .populate({ path: "products.productId", select: "productName priceWithCommission category" });
+        .populate({ path: "customerId", select: "name phoneNumber address" });
 
 export const findOrdersByFilterWithProductPopulate = (filter, skip, limit) =>
     Order.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate({ path: "products.productId", select: "price discount commission" })
         .populate({ path: "products.vendorId", select: "shopName address pickupTime" }); // Targets vendorId inside the products array
 
 // ── Products ──────────────────────────────────────────────────────────────────
@@ -75,6 +63,9 @@ export const findProductByIdWithVendorAuth = (id) =>
         path: "vendorId",
         populate: { path: "authId" },
     });
+
+export const findProductsByIds = (ids) =>
+    Product.find({ _id: { $in: ids } }).select("productName price discount commission vendorId");
 
 export const getDistinctProductIdsByVendor = (vendorId) =>
     Product.distinct("_id", { vendorId });

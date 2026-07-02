@@ -37,6 +37,40 @@ export function attachOrderSummary(order) {
     return order;
 }
 
+/**
+ * Rebuilds safe product objects for order responses using live products when available.
+ */
+export function hydrateOrderProducts(order, productDocs = []) {
+    const productMap = new Map(
+        productDocs.map((productDoc) => [productDoc._id.toString(), productDoc.toObject()])
+    );
+
+    order.products = order.products.map((item) => {
+        const productId = item.productId?.toString?.() || item.productRefId || null;
+        const liveProduct = productId ? productMap.get(productId) : null;
+
+        if (liveProduct) {
+            return {
+                ...item,
+                productId: liveProduct,
+            };
+        }
+
+        return {
+            ...item,
+            productId: {
+                _id: productId,
+                productName: item.productName || "Deleted product",
+                price: item.priceAtPurchase,
+                commission: 0,
+                discount: 0,
+            },
+        };
+    });
+
+    return order;
+}
+
 // ── Status Filter Helper ──────────────────────────────────────────────────────
 
 /**
@@ -106,6 +140,8 @@ export async function createOrderForCustomer(customerId, products, shippingAddre
 
         verifiedProductsList.push({
             productId: item.productId,
+            productRefId: item.productId.toString(),
+            productName: product.productName,
             vendorId: product.vendorId?._id || product.vendorId, //added to match schema edit
             quantity: item.quantity,
             priceAtPurchase: parseFloat(Math.max(0, finalCustomerPrice).toFixed(2)),
@@ -140,17 +176,24 @@ export async function getCustomerOrders(customerId, incomingStatus, page, limit)
     const skip = (page - 1) * limit;
 
     const totalOrders = await ordersRepo.countOrdersByFilter(queryFilter);
-    const rawOrders = await ordersRepo.findOrdersByFilterWithProductPopulate(
+    const rawOrders = await ordersRepo.findOrdersByFilterWithCustomerPopulate(
         queryFilter,
         skip,
         limit
     );
 
+    const productIds = [...new Set(
+        rawOrders.flatMap((orderDoc) =>
+            orderDoc.products.map((item) => item.productId?.toString?.()).filter(Boolean)
+        )
+    )];
+    const liveProducts = productIds.length > 0 ? await ordersRepo.findProductsByIds(productIds) : [];
+
     // 2. Map through orders to calculate summary pricing totals
     const orders = rawOrders.map((orderDoc) => {
         // Convert Mongoose Document to raw JS object so we can append custom properties safely
         const order = orderDoc.toObject();
-        return attachOrderSummary(order);
+        return attachOrderSummary(hydrateOrderProducts(order, liveProducts));
     });
 
     return { orders, totalOrders };
@@ -170,11 +213,23 @@ export async function getOrdersForVendor(vendorId, incomingStatus, page, limit) 
     );
 
     const totalOrders = await ordersRepo.countOrdersByFilter(queryFilter);
-    const orders = await ordersRepo.findOrdersByFilterWithCustomerPopulate(
+    const rawOrders = await ordersRepo.findOrdersByFilter(
         queryFilter,
         skip,
         limit
     );
+
+    const productIds = [...new Set(
+        rawOrders.flatMap((orderDoc) =>
+            orderDoc.products.map((item) => item.productId?.toString?.()).filter(Boolean)
+        )
+    )];
+    const liveProducts = productIds.length > 0 ? await ordersRepo.findProductsByIds(productIds) : [];
+
+    const orders = rawOrders.map((orderDoc) => {
+        const order = orderDoc.toObject();
+        return hydrateOrderProducts(order, liveProducts);
+    });
 
     return { orders, totalOrders };
 }
@@ -187,6 +242,13 @@ export async function getOrdersForVendor(vendorId, incomingStatus, page, limit) 
 export async function getOrderDetails(orderId, currentUserId, currentUserRole) {
     const orderDoc = await ordersRepo.findOrderByIdPopulatedForDetail(orderId);
     if (!orderDoc) throw new AppError("Order not found", 404);
+
+    const orderProductIds = orderDoc.products
+        .map((item) => item.productId?.toString?.())
+        .filter(Boolean);
+    const liveProducts = orderProductIds.length > 0
+        ? await ordersRepo.findProductsByIds(orderProductIds)
+        : [];
 
     // --- MULTI-ROLE SECURITY GUARDRAIL ---
     const isAdmin = currentUserRole === "admin";
@@ -216,7 +278,7 @@ export async function getOrderDetails(orderId, currentUserId, currentUserRole) {
 
     // Convert the single document safely into a plain object
     const order = orderDoc.toObject();
-    return attachOrderSummary(order);
+    return attachOrderSummary(hydrateOrderProducts(order, liveProducts));
 }
 
 // ── Order Cancellation ────────────────────────────────────────────────────────
@@ -247,7 +309,7 @@ export async function cancelOrderById(orderId, customerId) {
     // them directly on the database server in a single network request packet.
     //this prevents the overhead of multiple round-trip queries that would occur if we updated each product sequentially in a loop, which is especially beneficial when there are many products to update.
 
-    return updatedOrder;
+    return updatedOrder.toObject ? updatedOrder.toObject() : updatedOrder;
 }
 
 // ── Status Update ─────────────────────────────────────────────────────────────
@@ -330,7 +392,7 @@ export async function updateOrderStatusById(orderId, status, currentUserId, curr
             ? "Order marked as abandoned and inventory returned successfully"
             : `Order status updated to '${status}' successfully`;
 
-    return { order: updatedOrder, message };
+    return { order: updatedOrder.toObject ? updatedOrder.toObject() : updatedOrder, message };
 }
 
 // ── Rating ────────────────────────────────────────────────────────────────────
@@ -385,5 +447,5 @@ export async function rateCompletedOrder(orderId, customerId, rating) {
     //Mutate the order document dynamically to mark it as rated
     const updatedOrder = await ordersRepo.markOrderRated(orderId);
 
-    return updatedOrder;
+    return updatedOrder.toObject ? updatedOrder.toObject() : updatedOrder;
 }
